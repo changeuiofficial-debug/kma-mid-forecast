@@ -95,14 +95,12 @@ nav{display:flex;gap:.25rem}nav a{text-decoration:none;color:#4d5964;padding:.55
 .chart-wrap{position:relative}
 .guide{stroke:#17212b;stroke-width:1;stroke-dasharray:3 3;opacity:0;transition:opacity .15s}.col:hover .guide{opacity:.45}.hit{fill:transparent;cursor:crosshair}
 .tip{position:absolute;transform:translateX(-50%);background:#17212b;color:#fff;font-size:.78rem;font-weight:700;padding:.45rem .65rem;border-radius:8px;white-space:nowrap;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:2}
-/* 중기전망 주제 카드 + 형광펜 */
+/* 중기전망 주제 카드 */
 .ol-grid{display:grid;gap:.75rem;margin-bottom:.5rem}
 .ol-card{display:grid;grid-template-columns:auto 1fr;gap:1rem;background:#fff;border:1px solid var(--line);border-radius:16px;padding:1.2rem 1.3rem}
 .ol-icon{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:#e9f4f6;color:var(--blue-dark)}.ol-icon .ui-ic{width:24px;height:24px}
 .ol-icon.umbrella{background:#e6f0fa;color:#1f6fae}.ol-icon.thermo{background:#fff1e6;color:#c4621d}.ol-icon.calendar{background:#eef0fb;color:#4a52a8}.ol-icon.alert{background:#fff4df;color:#9a5b12}
 .ol-body h3{margin:.1rem 0 .35rem;font-size:1.05rem}.ol-body p{margin:.2rem 0;line-height:1.85}
-mark.hl{background-image:linear-gradient(transparent 58%,#ffe58a 58%);background-repeat:no-repeat;background-size:100% 100%;color:inherit;padding:0 .1em;border-radius:2px}
-mark.hl-num{background-image:linear-gradient(transparent 58%,#ffd3b0 58%)}
 /* 버튼·카운트다운·헤더 */
 .primary{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;transition:background .2s,transform .15s var(--ease)}.primary:active{transform:scale(.97)}
 .btn-ic{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
@@ -120,7 +118,6 @@ mark.hl-num{background-image:linear-gradient(transparent 58%,#ffd3b0 58%)}
   .enter .gauge-fill,.enter .wave-fill{animation:growX .8s var(--ease) both;animation-delay:calc(var(--i,0)*45ms + 250ms)}
   .reveal{opacity:0;transform:translateY(14px);transition:opacity .6s var(--ease),transform .6s var(--ease)}.reveal.in{opacity:1;transform:none}
   .ol-card.reveal{transition-delay:calc(var(--i)*70ms)}
-  mark.hl{transition:background-size .9s var(--ease) .35s}.reveal:not(.in) mark.hl{background-size:0% 100%}
   .tabpanel.swap{animation:fadeUp .35s var(--ease)}
   .acc[open] .acc-body{animation:fadeUp .35s var(--ease)}
   .primary.loading .btn-ic{animation:spin .8s linear infinite}

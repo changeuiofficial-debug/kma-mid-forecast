@@ -368,11 +368,10 @@ function parseOutlook(text){
   }
   return secs;
 }
-// 원문에 이미 있는 표현만 강조한다: 날짜는 굵게, 기온·물결 등 숫자 범위에만 형광펜(이스케이프한 뒤 적용).
+// 원문에 이미 있는 날짜 표현만 굵게 표시한다(이스케이프한 뒤 적용). 문장은 바꾸지 않는다.
 function highlight(escaped){
   return escaped
-    .replace(/(\d{1,2}일\([월화수목금토일]\)(?:\s*(?:오전|오후|새벽|아침|낮|밤))?(?:\s*~\s*\d{1,2}일\([월화수목금토일]\))?)/g,'<strong class="dt">$1</strong>')
-    .replace(/(-?\d+(?:\.\d+)?\s*~\s*-?\d+(?:\.\d+)?\s*(?:℃|°C|mm|m)(?![a-z]))/g,'<mark class="hl hl-num">$1</mark>');
+    .replace(/(\d{1,2}일\([월화수목금토일]\)(?:\s*(?:오전|오후|새벽|아침|낮|밤))?(?:\s*~\s*\d{1,2}일\([월화수목금토일]\))?)/g,'<strong class="dt">$1</strong>');
 }
 function renderOutlook(r){
   const text=r.data?.text;
@@ -382,7 +381,7 @@ function renderOutlook(r){
     const secs=parseOutlook(text);
     body=`<div class="ol-grid">${secs.map((s,i)=>{const icon=(TOPIC_ICON.find(([re])=>re.test(s.topic))||[null,"info"])[1];
       return `<article class="ol-card reveal" style="--i:${i}"><div class="ol-icon ${icon}">${ui(icon)}</div><div class="ol-body"><h3>${esc(s.topic)}</h3>${s.lines.map(l=>`<p>${highlight(esc(l))}</p>`).join("")}</div></article>`;}).join("")}</div>
-    <p class="small">기상청 원문을 표시(○, *) 기준으로 주제별 카드로 나눈 것입니다. 문장은 바꾸지 않았고, 원문에 있는 날짜는 굵게, 숫자 범위에만 형광펜을 칠했습니다. 수치 그래프로 바꾸지 않습니다.</p>
+    <p class="small">기상청 원문을 표시(○, *) 기준으로 주제별 카드로 나눈 것입니다. 문장은 바꾸지 않았고, 원문에 있는 날짜만 굵게 표시했습니다. 수치 그래프로 바꾸지 않습니다.</p>
     <details class="acc raw"><summary>${ui("doc")}원문 전체 그대로 보기</summary><div class="acc-body"><p class="outlook-text">${esc(text)}</p></div></details>`;
   }
   $("results").innerHTML=metaPanel(r)+body+rawDetails(r);
