@@ -96,11 +96,6 @@ nav{display:flex;gap:.25rem}nav a{text-decoration:none;color:#4d5964;padding:.55
 .guide{stroke:#17212b;stroke-width:1;stroke-dasharray:3 3;opacity:0;transition:opacity .15s}.col:hover .guide{opacity:.45}.hit{fill:transparent;cursor:crosshair}
 .tip{position:absolute;transform:translateX(-50%);background:#17212b;color:#fff;font-size:.78rem;font-weight:700;padding:.45rem .65rem;border-radius:8px;white-space:nowrap;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:2}
 /* 중기전망 주제 카드 */
-.ol-grid{display:grid;gap:.75rem;margin-bottom:.5rem}
-.ol-card{display:grid;grid-template-columns:auto 1fr;gap:1rem;background:#fff;border:1px solid var(--line);border-radius:16px;padding:1.2rem 1.3rem}
-.ol-icon{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:#e9f4f6;color:var(--blue-dark)}.ol-icon .ui-ic{width:24px;height:24px}
-.ol-icon.umbrella{background:#e6f0fa;color:#1f6fae}.ol-icon.thermo{background:#fff1e6;color:#c4621d}.ol-icon.calendar{background:#eef0fb;color:#4a52a8}.ol-icon.alert{background:#fff4df;color:#9a5b12}
-.ol-body h3{margin:.1rem 0 .35rem;font-size:1.05rem}.ol-body p{margin:.2rem 0;line-height:1.85}
 /* 버튼·카운트다운·헤더 */
 .primary{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;transition:background .2s,transform .15s var(--ease)}.primary:active{transform:scale(.97)}
 .btn-ic{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
@@ -117,7 +112,7 @@ nav{display:flex;gap:.25rem}nav a{text-decoration:none;color:#4d5964;padding:.55
   .enter .fade{animation:fadeIn .4s ease both;animation-delay:calc(var(--i)*40ms + 450ms)}
   .enter .gauge-fill,.enter .wave-fill{animation:growX .8s var(--ease) both;animation-delay:calc(var(--i,0)*45ms + 250ms)}
   .reveal{opacity:0;transform:translateY(14px);transition:opacity .6s var(--ease),transform .6s var(--ease)}.reveal.in{opacity:1;transform:none}
-  .ol-card.reveal{transition-delay:calc(var(--i)*70ms)}
+  
   .tabpanel.swap{animation:fadeUp .35s var(--ease)}
   .acc[open] .acc-body{animation:fadeUp .35s var(--ease)}
   .primary.loading .btn-ic{animation:spin .8s linear infinite}
@@ -133,7 +128,7 @@ nav{display:flex;gap:.25rem}nav a{text-decoration:none;color:#4d5964;padding:.55
 @media(max-width:760px){.stats{gap:.5rem}.stat{padding:.75rem}.stat strong{font-size:1.45rem}.timeline{grid-auto-columns:46%}.ol-card{padding:1rem}}
 @media(max-width:430px){.stats{grid-template-columns:1fr}.stat-ic{grid-row:1/3}.stat{grid-template-columns:auto 1fr auto;align-items:center;column-gap:.6rem}.stat-sub{grid-column:2/4}.stat strong{grid-row:1/3;grid-column:3;font-size:1.5rem}
   .ol-card{grid-template-columns:1fr;gap:.6rem}.tablist{display:flex}.tablist [role=tab]{flex:1}.timeline{grid-auto-columns:62%}}
-.ol-body strong.dt{color:var(--blue-dark);font-weight:800}
+.ol-text strong.dt{color:var(--blue-dark);font-weight:800}
 @media(max-width:760px){.panel-head{flex-direction:column;align-items:stretch;gap:.6rem}.panel-head .legend{margin-bottom:0}}
 
 /* ===== 29: 화면용 드롭다운 ===== */
@@ -191,34 +186,40 @@ body.combo-lock{overflow:hidden}
 @media(max-width:900px){.status-strip{grid-template-columns:1fr 1fr}}
 @media(max-width:430px){.status-strip{grid-template-columns:1fr 1fr}.status-strip div{padding:.8rem}}
 
-/* 31: 중기전망 칩 요약 + 접히는 원문 */
-details.ol-card{display:block;padding:0;overflow:hidden}
-details.ol-card>summary{list-style:none;display:grid;grid-template-columns:auto 1fr auto;gap:1rem;align-items:start;padding:1.1rem 1.3rem;cursor:pointer}
-details.ol-card>summary::-webkit-details-marker{display:none}
-details.ol-card>summary:hover{background:#fafcfd}
-details.ol-card>summary:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
-.ol-main h3{margin:.15rem 0 0;font-size:1.05rem}
-.ol-caret{width:8px;height:8px;margin-top:.7rem;border-right:2px solid #7b8994;border-bottom:2px solid #7b8994;transform:rotate(45deg);transition:transform .3s var(--ease)}
-details.ol-card[open]>summary .ol-caret{transform:rotate(-135deg)}
-.ol-text{padding:.2rem 1.3rem 1.2rem calc(1.3rem + 44px + 1rem);border-top:1px dashed var(--line);margin-top:-.2rem;padding-top:.9rem;color:#33414c}
-.ol-text p{margin:.2rem 0;line-height:1.85;font-size:.95rem}
-.ol-row{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .5rem;margin-top:.55rem}
-.ol-date{font-weight:800;font-size:.88rem;color:var(--blue-dark);background:#eef3f8;padding:.22rem .6rem;border-radius:8px;font-variant-numeric:tabular-nums}
-.ol-kind{display:inline-flex;align-items:center;gap:.25rem;font-weight:800;font-size:.8rem;color:#1d5f84;background:#e6f0fa;padding:.22rem .6rem;border-radius:999px}
-.ol-kind .ui-ic{width:15px;height:15px}.ol-kind.sea{background:#e0f2f6;color:#104b60}.ol-kind.plain{background:#f0f3f5;color:#53626d}
-.seg{display:inline-flex;align-items:center;gap:.4rem;border:1px solid var(--line);border-radius:999px;padding:.22rem .7rem;font-size:.86rem;background:#fff}
-.seg b{font-weight:800;font-variant-numeric:tabular-nums}.seg i{font-style:normal;color:var(--muted);padding-left:.4rem;border-left:1px solid var(--line)}
-.tp{display:inline-flex;align-items:baseline;gap:.35rem;padding:.22rem .65rem;border-radius:8px;font-weight:800;font-size:.92rem;font-variant-numeric:tabular-nums}
-.tp small{font-weight:700;font-size:.72rem;opacity:.75}
-.tp.am{background:#e4f0f6;color:#12506a}.tp.dy{background:#fdebdc;color:#a8530f}.tp.wv{background:#e0f2f6;color:#104b60}
-.trend{font-size:.8rem;color:var(--muted)}
-@media(max-width:600px){details.ol-card>summary{grid-template-columns:auto 1fr auto;gap:.7rem;padding:1rem}.ol-icon{width:38px;height:38px}.ol-text{padding:.8rem 1rem 1rem}}
-/* 31: 모바일에서는 칩이 카드 전체 폭을 쓰도록 (아이콘·제목 한 줄, 칩은 그 아래) */
+/* 32: 중기전망 3줄 요약 + 자세히 보기 (칩 없이 글자 정렬) */
+.ol-sum{padding:.3rem 1.3rem}
+.sum-row{display:grid;grid-template-columns:40px 48px 1fr;gap:14px;align-items:start;padding:1rem 0;border-bottom:1px solid var(--line)}
+.sum-row:last-child{border-bottom:0}
+.sum-ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:#e9f4f6;color:var(--blue-dark)}.sum-ic .ui-ic{width:22px;height:22px}
+.sum-row.rain .sum-ic{background:#e6f0fa;color:#1f6fae}.sum-row.temp .sum-ic{background:#fff1e6;color:#c4621d}.sum-row.sea .sum-ic{background:#e0f2f6;color:#104b60}
+.sum-label{font-weight:800;font-size:1rem;padding-top:.5rem}
+.sum-body{font-size:1rem;line-height:1.85;padding-top:.15rem;min-width:0}
+.sum-line b,.sg b{font-weight:800;font-variant-numeric:tabular-nums}
+.dot{color:#a3afb8}
+.sum-temp{display:grid;grid-template-columns:max-content 1fr;column-gap:1rem;align-items:baseline}
+.sum-temp+.sum-temp{margin-top:.15rem}
+.sum-temp .when{font-weight:800;font-variant-numeric:tabular-nums}
+.sum-temp em{font-style:normal;font-weight:800;font-variant-numeric:tabular-nums}
+.sum-temp em.am{color:#12607f}.sum-temp em.dy{color:#c4621d}
+.note{display:block;font-size:.82rem;color:var(--muted);font-weight:500;line-height:1.5}.note.inline{display:inline;margin-left:.3rem}
+.ol-more{padding:.4rem 1.3rem}
+.ol-more-title{display:flex;align-items:center;gap:.5rem;font-size:1rem;margin:.7rem 0 .2rem}
+.ol-more-title .ui-ic{color:var(--muted)}
+.ol-item{border-top:1px solid var(--line)}.ol-item:first-of-type{border-top:0}
+.ol-item>summary{list-style:none;display:flex;align-items:center;gap:.7rem;padding:.85rem 0;cursor:pointer;font-size:.95rem}
+.ol-item>summary::-webkit-details-marker{display:none}
+.ol-item>summary:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:6px}
+.ol-item-title{font-weight:700}
+.flag{display:inline-block;margin-left:.5rem;font-size:.74rem;font-weight:800;background:var(--warning-bg);color:var(--warning);padding:.08rem .5rem;border-radius:6px;vertical-align:1px}
+.ol-hint{margin-left:auto;font-size:.82rem;color:var(--muted)}
+.ol-hint .when-open{display:none}.ol-item[open] .ol-hint .when-closed{display:none}.ol-item[open] .ol-hint .when-open{display:inline}
+.ol-caret{width:8px;height:8px;border-right:2px solid #7b8994;border-bottom:2px solid #7b8994;transform:rotate(-45deg);transition:transform .3s var(--ease);flex:none}
+.ol-item[open] .ol-caret{transform:rotate(45deg)}
+.ol-text{padding:.1rem 0 1rem;color:#33414c}.ol-text p{margin:.3rem 0;line-height:1.85;font-size:.95rem}
 @media(max-width:600px){
-  details.ol-card>summary{align-items:center;row-gap:0}
-  .ol-main{display:contents}
-  .ol-main h3{grid-column:2;grid-row:1;margin:0}
-  .ol-icon{grid-row:1}
-  .ol-caret{grid-column:3;grid-row:1;margin-top:0}
-  .ol-main .ol-row{grid-column:1/-1}
+  .ol-sum{padding:.2rem 1rem}.ol-more{padding:.3rem 1rem}
+  .sum-row{grid-template-columns:40px 1fr;gap:.4rem .8rem;padding:.9rem 0}
+  .sum-label{align-self:center;padding-top:0}
+  .sum-body{grid-column:1/-1;padding-top:0}
+  .sum-temp{grid-template-columns:1fr;row-gap:0;margin-top:.35rem}.sum-temp:first-child{margin-top:0}
 }

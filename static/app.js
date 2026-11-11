@@ -367,20 +367,31 @@ function render(result,opts={}){
   observeReveals(el, opts.animate);
 }
 
-const TOPIC_ICON=[[/강수|강우|비|눈/,"umbrella"],[/기온/,"thermo"],[/주말|요일/,"calendar"],[/변동|불확실/,"alert"],[/해상|물결|파고|바다/,"wave"]];
 // 원문에 이미 있는 날짜 표현만 굵게 표시한다(이스케이프한 뒤 적용). 문장은 바꾸지 않는다.
 const BOLD_DATE=new RegExp(`(${OutlookParse.DEXPR})`,"g");
 function highlight(escaped){ return escaped.replace(BOLD_DATE,'<strong class="dt">$1</strong>'); }
 
-// 칩: 원문에서 뽑은 날짜·지역·기온·파고. 숫자와 지역 이름은 원문 글자 그대로다.
-const chipDate=(d)=>`<span class="ol-date">${esc(d)}</span>`;
-const seg=(s)=>`<span class="seg"><b>${esc(s.date)}</b>${s.place?`<i>${esc(s.place)}</i>`:""}</span>`;
-function rowHtml(r){
-  if(r.type==="rain") return `<div class="ol-row"><span class="ol-kind">${ui("drop")}${esc(r.kind)}</span>${r.segs.map(seg).join("")}</div>`;
-  if(r.type==="sea") return `<div class="ol-row"><span class="ol-kind sea">${ui("wave")}물결</span>${r.segs.map(seg).join("")}<span class="tp wv"><small>파고</small>${esc(r.low)}~${esc(r.high)}m</span>${r.qualifier?`<span class="trend">${esc(r.qualifier)}</span>`:""}</div>`;
-  if(r.type==="temp") return `<div class="ol-row">${r.date?chipDate(r.date):""}<span class="tp am"><small>아침</small>${esc(r.am[0])}~${esc(r.am[1])}℃</span><span class="tp dy"><small>낮</small>${esc(r.day[0])}~${esc(r.day[1])}℃</span>${r.trend?`<span class="trend">${esc(r.trend)}</span>`:""}</div>`;
-  if(r.type==="dates") return `<div class="ol-row"><span class="ol-kind plain">${ui("calendar")}관련 날짜</span>${r.dates.map(chipDate).join("")}</div>`;
-  return "";
+// ---- 중기전망: 3줄 요약(비·기온·해상) + 자세히 보기 ----
+// 요약에는 원문에 적힌 날짜·지역·기온·파고만 옮긴다. 숫자와 지역 이름은 원문 글자 그대로이고, 월은 발표일과 요일로 확인한 값이다.
+const dot='<span class="dot"> · </span>';
+const segText=(s)=>`<span class="sg"><b>${esc(s.date)}</b>${s.place?` ${esc(s.place)}`:""}</span>`;
+function sumRow(kind,icon,label,body){
+  return `<div class="sum-row ${kind}"><span class="sum-ic">${ui(icon)}</span><span class="sum-label">${esc(label)}</span><div class="sum-body">${body}</div></div>`;
+}
+function summaryRows(topics){
+  const rain=new Map(), temp=[], sea=[];
+  topics.filter(t=>t.complete).forEach(t=>t.paragraphs.forEach(p=>p.rows.forEach(r=>{
+    if(r.type==="rain"){ if(!rain.has(r.kind)) rain.set(r.kind,[]); rain.get(r.kind).push(r); }
+    else if(r.type==="temp") temp.push(r); else if(r.type==="sea") sea.push(r);
+  })));
+  const out=[];
+  rain.forEach((rows,kind)=>out.push(sumRow("rain","umbrella",kind,rows.map(r=>`<div class="sum-line">${r.segs.map(segText).join(dot)}</div>`).join(""))));
+  if(temp.length) out.push(sumRow("temp","thermo","기온",temp.map(r=>`<div class="sum-temp"><b class="when">${esc(r.date)}</b><span class="vals">아침 <em class="am">${esc(r.am[0])}~${esc(r.am[1])}℃</em>${dot}낮 <em class="dy">${esc(r.day[0])}~${esc(r.day[1])}℃</em>${r.trend?`<small class="note">${esc(r.trend)}</small>`:""}</span></div>`).join("")));
+  sea.forEach(r=>out.push(sumRow("sea","wave","해상",`<div class="sum-line">${r.segs.map(segText).join(dot)}</div><div class="sum-line">물결 <b>${esc(r.low)}~${esc(r.high)}m</b>${r.qualifier?` <small class="note inline">${esc(r.qualifier)}</small>`:""}</div>`)));
+  return out;
+}
+function moreItem(title,flag,inner,open){
+  return `<details class="ol-item"${open?" open":""}><summary><span class="ol-item-title">${esc(title)}${flag?'<span class="flag">유의</span>':""}</span><span class="ol-hint"><span class="when-closed">원문 보기</span><span class="when-open">원문 접기</span></span><i class="ol-caret" aria-hidden="true"></i></summary><div class="ol-text">${inner}</div></details>`;
 }
 function renderOutlook(r){
   const text=r.data?.text;
@@ -388,15 +399,20 @@ function renderOutlook(r){
   if(!text){ body='<section class="panel"><p class="missing">전망문(wfSv)이 제공되지 않았습니다.</p></section>'; }
   else{
     const topics=OutlookParse.analyze(text,r.requestedRelease);
-    body=`<div class="ol-grid">${topics.map((s,i)=>{
-      const icon=(TOPIC_ICON.find(([re])=>re.test(s.topic))||[null,"info"])[1];
-      const rows=s.paragraphs.flatMap(p=>p.rows).map(rowHtml).join("");
-      // 칩만으로 문장 내용을 모두 담은 카드는 원문을 접어 두고, 그렇지 않은 카드는 원문을 펼쳐 둔다.
-      const open=!(s.complete&&rows);
-      return `<details class="ol-card reveal" style="--i:${i}"${open?" open":""}><summary><span class="ol-icon ${icon}">${ui(icon)}</span><span class="ol-main"><h3>${esc(s.topic)}</h3>${rows}</span><span class="ol-caret" aria-hidden="true"></span></summary>
-        <div class="ol-text">${s.paragraphs.map(p=>`<p>${highlight(esc(p.text))}</p>`).join("")}</div></details>`;}).join("")}</div>
-    <p class="small">기상청 원문에 적힌 날짜·지역·기온·파고만 칩으로 뽑았고 값은 바꾸지 않았습니다(날짜의 월은 발표일과 요일로 맞춰 표시). 칩만으로 담기지 않는 문장은 원문을 펼쳐 두며, 카드를 눌러 원문을 접고 펼 수 있습니다. 수치 그래프로 바꾸지 않습니다.</p>
-    <details class="acc raw"><summary>${ui("doc")}원문 전체 그대로 보기</summary><div class="acc-body"><p class="outlook-text">${esc(text)}</p></div></details>`;
+    const rows=summaryRows(topics), hasSummary=rows.length>0;
+    const names={}; topics.forEach(t=>{names[t.topic]=(names[t.topic]||0)+1;});
+    const rest=topics.filter(t=>!t.complete||!hasSummary);
+    const items=rest.map(t=>{
+      // 같은 이름의 주제가 여럿이면 첫 날짜를 붙여 구분한다.
+      const first=t.paragraphs.flatMap(p=>p.rows).find(x=>x.type==="dates")?.dates[0];
+      const title=names[t.topic]>1&&first?`${t.topic} · ${first}`:t.topic;
+      return moreItem(title,/변동|유의|주의/.test(t.topic),t.paragraphs.map(p=>`<p>${highlight(esc(p.text))}</p>`).join(""),!hasSummary);
+    }).join("");
+    const full=moreItem("기상청 원문 전체",false,`<p class="outlook-text">${esc(text)}</p>`,false);
+    body=(hasSummary?`<section class="panel ol-sum reveal">${rows.join("")}</section>
+      <p class="small">비·기온·해상은 기상청 원문에 적힌 값만 옮긴 요약입니다(날짜의 월은 발표일과 요일로 확인). 수치 그래프로 바꾸지 않았고, 아래에서 원문을 볼 수 있습니다.</p>`
+      :'<p class="small">요약할 수 있는 문장 형태가 아니어서 원문을 그대로 표시합니다.</p>')
+      +`<section class="panel ol-more reveal"><h3 class="ol-more-title">${ui("doc")}자세히 보기</h3>${items}${full}</section>`;
   }
   $("results").innerHTML=metaPanel(r)+body+rawDetails(r);
 }
