@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="기상청 중기예보 네 기능을 지역별로 조회하고 그래프와 표로 확인합니다.">
+  <title>기상청 중기예보</title>
+  <link rel="stylesheet" href="/styles.css?v=27">
+</head>
+<body>
+  <a class="skip" href="#main">본문으로 건너뛰기</a>
+  <header class="site-header">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>기상청 중기예보</span></div>
+    <nav aria-label="주요 메뉴">
+      <a href="/outlook" data-page="outlook">중기전망</a>
+      <a href="/land" data-page="land">육상예보</a>
+      <a href="/temperature" data-page="temperature">기온</a>
+      <a href="/sea" data-page="sea">해상예보</a>
+    </nav>
+  </header>
+
+  <main id="main" class="shell">
+    <section class="intro">
+      <div>
+        <p class="eyebrow" id="feature-name"></p>
+        <h1 id="page-title">중기예보</h1>
+        <p id="page-description" class="lede"></p>
+      </div>
+      <div class="release-note"><strong>하루 2회 발표</strong><span>06:00 · 18:00 KST</span></div>
+    </section>
+
+    <section id="key-alert" class="alert warning hidden" role="status"></section>
+
+    <section class="control-card" aria-labelledby="query-title">
+      <div class="section-heading">
+        <div><p class="step">조회 조건</p><h2 id="query-title">지역과 발표시각</h2></div>
+        <button id="refresh" class="primary" type="button">지금 확인</button>
+      </div>
+      <div class="controls">
+        <label>지역 선택<select id="region"></select></label>
+        <label>발표시각<select id="release"></select></label>
+      </div>
+      <div id="region-detail" class="region-detail"></div>
+    </section>
+
+    <section class="status-strip" aria-label="갱신 상태">
+      <div><span>자료 발표시각(요청 tmFc)</span><strong id="status-release">—</strong></div>
+      <div><span>기상청 마지막 성공 조회</span><strong id="status-success">—</strong></div>
+      <div><span>마지막 확인시각</span><strong id="status-checked">—</strong></div>
+      <div><span>다음 자동 확인</span><strong id="status-countdown">—</strong></div>
+      <div><span>이번 자료 출처</span><strong id="status-source">—</strong></div>
+      <div><span>최근 24시간 앱 외부 호출</span><strong id="status-usage">—</strong></div>
+    </section>
+
+    <section id="admin-alert" class="alert warning hidden" role="status"></section>
+    <section id="message" class="alert hidden" role="alert"></section>
+    <section id="results" aria-live="polite"></section>
+
+    <section class="method-note">
+      <h2>데이터 안내</h2>
+      <p>중기예보는 하루 두 번(06:00·18:00 KST) 발표됩니다. 30초마다 새 예보가 생기는 것이 아니라, 활성 탭에서 30초마다 같은 발표본이 바뀌었는지 서버에 확인합니다. 숨긴 탭에서는 자동 확인을 멈춥니다.</p>
+      <p>브라우저는 이 로컬 서버에만 요청합니다. 서버가 기상청 API 호출, 같은 조건의 캐시 공유, 네 기능 합산 호출량, 외부 호출 사이 최소 30초 간격을 관리합니다. 그래서 탭을 여러 개 열어도 외부 호출은 24시간 최대 2,880회입니다.</p>
+      <p>호출량은 최근 24시간 이동 집계입니다(공공데이터포털의 일일 초기화 시각은 공식 자료에서 확인하지 못했습니다). 8,000회부터 경고하고 9,000회에서 외부 호출을 멈춥니다. 같은 인증키를 다른 프로그램에서도 쓰면 포털 집계와 다를 수 있습니다.</p>
+      <p>지역코드는 기능마다 따로 관리합니다(전망 stnId, 육상 regId, 기온 regId, 해상 regId). 행정동 단위 예보가 아니며, 육상 지역과 해역을 자동으로 연결하지 않습니다.</p>
+    </section>
+  </main>
+  <button id="chat-open" class="chat-open" type="button" aria-controls="chat-panel" aria-expanded="false">AI 예보 도우미</button>
+  <aside id="chat-panel" class="chat-panel hidden" aria-label="AI 예보 도우미">
+    <div class="chat-head">
+      <div><strong>AI 예보 도우미</strong><span id="chat-model">Gemini 연결 확인 중</span></div>
+      <div><button id="chat-reset" type="button">초기화</button><button id="chat-close" type="button" aria-label="챗봇 닫기">×</button></div>
+    </div>
+    <p class="chat-privacy">질문과 필요한 예보 정보가 Google Gemini로 전달됩니다. 비밀번호·인증키·주민등록번호 등 민감정보는 입력하지 마세요.</p>
+    <div id="chat-messages" class="chat-messages" aria-live="polite"></div>
+    <div class="chat-suggestions" aria-label="예시 질문">
+      <button type="button">기온예보 페이지로 이동해 줘</button>
+      <button type="button">현재 표를 쉽게 설명해 줘</button>
+      <button type="button">왜 30초마다 확인해?</button>
+    </div>
+    <form id="chat-form" class="chat-form">
+      <label class="sr-only" for="chat-input">질문 입력</label>
+      <textarea id="chat-input" rows="2" maxlength="1200" placeholder="예: 서울의 중기기온을 보여줘"></textarea>
+      <button id="chat-send" type="submit">전송</button>
+    </form>
+  </aside>
+  <footer>출처: 기상청 중기예보 조회서비스 · 공공데이터포털</footer>
+  <script src="/app.js?v=27" defer></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+# 실제 인증키와 비밀 설정 (KEY.env.example은 저장소에 포함)
+KEY.env
+KEY.env.txt
+.env
+.env.*
+*.env.local
+# 실행 중 생성되는 캐시·호출 기록
+runtime/
+__pycache__/
+*.py[cod]
+*.zip
+.DS_Store
