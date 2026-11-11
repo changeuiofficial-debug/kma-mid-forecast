@@ -63,11 +63,11 @@ async function initialize(){
     $("region").addEventListener("change",()=>{saveRegion($("region").value); updateRegionDetail(); state.lastGood=null; clearStatus(); $("results").classList.add("is-switching"); resetRelease(); refresh(true);});
     $("release").addEventListener("change",()=>{state.releaseChosenByUser=true; state.lastGood=null; clearStatus(); $("results").classList.add("is-switching"); refresh(true);});
     $("refresh").addEventListener("click",()=>refresh(true));
-    document.addEventListener("visibilitychange",()=>{ if(!document.hidden && state.autoEnabled && state.seconds<=0) refresh(false); });
+    document.addEventListener("visibilitychange",()=>{ if(!document.hidden && state.autoEnabled && (state.seconds<=0 || !state.renderedKey)) refresh(false); });  // 처음부터 숨겨져 있던 탭도 보이는 즉시 조회
     window.addEventListener("pagehide",()=>{ clearInterval(state.timer); state.timer=null; });
     state.autoEnabled = status.keyStatus==="configured";
     state.timer=setInterval(tick,1000); preparePendingAction(); updateRegionDetail();
-    if(state.autoEnabled){ await refresh(false); }
+    if(state.autoEnabled){ await refresh(true); }  // 첫 조회는 탭이 숨겨져 있어도 한 번 실행(서버 캐시·30초 간격 적용)
     else { $("status-countdown").textContent="인증키 설정 후 시작"; renderKeyNeeded(status); }
     finishPendingAction();
   }catch(error){ showMessage(error.message,"error"); $("status-countdown").textContent="중지됨"; }
@@ -368,31 +368,34 @@ function render(result,opts={}){
 }
 
 const TOPIC_ICON=[[/강수|강우|비|눈/,"umbrella"],[/기온/,"thermo"],[/주말|요일/,"calendar"],[/변동|불확실/,"alert"],[/해상|물결|파고|바다/,"wave"]];
-function parseOutlook(text){
-  const secs=[]; let cur=null;
-  for(const raw of String(text).split(/\r?\n/)){
-    const line=raw.trim(); if(!line) continue;
-    const m=line.match(/^(?:[○◦•●*※]|o)\s*\(([^)]{1,15})\)\s*(.*)$/);
-    if(m){cur={topic:m[1],lines:m[2]?[m[2]]:[]};secs.push(cur);}
-    else if(cur) cur.lines.push(line);
-    else {cur={topic:"개요",lines:[line]};secs.push(cur);}
-  }
-  return secs;
-}
 // 원문에 이미 있는 날짜 표현만 굵게 표시한다(이스케이프한 뒤 적용). 문장은 바꾸지 않는다.
-function highlight(escaped){
-  return escaped
-    .replace(/(\d{1,2}일\([월화수목금토일]\)(?:\s*(?:오전|오후|새벽|아침|낮|밤))?(?:\s*~\s*\d{1,2}일\([월화수목금토일]\))?)/g,'<strong class="dt">$1</strong>');
+const BOLD_DATE=new RegExp(`(${OutlookParse.DEXPR})`,"g");
+function highlight(escaped){ return escaped.replace(BOLD_DATE,'<strong class="dt">$1</strong>'); }
+
+// 칩: 원문에서 뽑은 날짜·지역·기온·파고. 숫자와 지역 이름은 원문 글자 그대로다.
+const chipDate=(d)=>`<span class="ol-date">${esc(d)}</span>`;
+const seg=(s)=>`<span class="seg"><b>${esc(s.date)}</b>${s.place?`<i>${esc(s.place)}</i>`:""}</span>`;
+function rowHtml(r){
+  if(r.type==="rain") return `<div class="ol-row"><span class="ol-kind">${ui("drop")}${esc(r.kind)}</span>${r.segs.map(seg).join("")}</div>`;
+  if(r.type==="sea") return `<div class="ol-row"><span class="ol-kind sea">${ui("wave")}물결</span>${r.segs.map(seg).join("")}<span class="tp wv"><small>파고</small>${esc(r.low)}~${esc(r.high)}m</span>${r.qualifier?`<span class="trend">${esc(r.qualifier)}</span>`:""}</div>`;
+  if(r.type==="temp") return `<div class="ol-row">${r.date?chipDate(r.date):""}<span class="tp am"><small>아침</small>${esc(r.am[0])}~${esc(r.am[1])}℃</span><span class="tp dy"><small>낮</small>${esc(r.day[0])}~${esc(r.day[1])}℃</span>${r.trend?`<span class="trend">${esc(r.trend)}</span>`:""}</div>`;
+  if(r.type==="dates") return `<div class="ol-row"><span class="ol-kind plain">${ui("calendar")}관련 날짜</span>${r.dates.map(chipDate).join("")}</div>`;
+  return "";
 }
 function renderOutlook(r){
   const text=r.data?.text;
   let body;
   if(!text){ body='<section class="panel"><p class="missing">전망문(wfSv)이 제공되지 않았습니다.</p></section>'; }
   else{
-    const secs=parseOutlook(text);
-    body=`<div class="ol-grid">${secs.map((s,i)=>{const icon=(TOPIC_ICON.find(([re])=>re.test(s.topic))||[null,"info"])[1];
-      return `<article class="ol-card reveal" style="--i:${i}"><div class="ol-icon ${icon}">${ui(icon)}</div><div class="ol-body"><h3>${esc(s.topic)}</h3>${s.lines.map(l=>`<p>${highlight(esc(l))}</p>`).join("")}</div></article>`;}).join("")}</div>
-    <p class="small">기상청 원문을 표시(○, *) 기준으로 주제별 카드로 나눈 것입니다. 문장은 바꾸지 않았고, 원문에 있는 날짜만 굵게 표시했습니다. 수치 그래프로 바꾸지 않습니다.</p>
+    const topics=OutlookParse.analyze(text,r.requestedRelease);
+    body=`<div class="ol-grid">${topics.map((s,i)=>{
+      const icon=(TOPIC_ICON.find(([re])=>re.test(s.topic))||[null,"info"])[1];
+      const rows=s.paragraphs.flatMap(p=>p.rows).map(rowHtml).join("");
+      // 칩만으로 문장 내용을 모두 담은 카드는 원문을 접어 두고, 그렇지 않은 카드는 원문을 펼쳐 둔다.
+      const open=!(s.complete&&rows);
+      return `<details class="ol-card reveal" style="--i:${i}"${open?" open":""}><summary><span class="ol-icon ${icon}">${ui(icon)}</span><span class="ol-main"><h3>${esc(s.topic)}</h3>${rows}</span><span class="ol-caret" aria-hidden="true"></span></summary>
+        <div class="ol-text">${s.paragraphs.map(p=>`<p>${highlight(esc(p.text))}</p>`).join("")}</div></details>`;}).join("")}</div>
+    <p class="small">기상청 원문에 적힌 날짜·지역·기온·파고만 칩으로 뽑았고 값은 바꾸지 않았습니다(날짜의 월은 발표일과 요일로 맞춰 표시). 칩만으로 담기지 않는 문장은 원문을 펼쳐 두며, 카드를 눌러 원문을 접고 펼 수 있습니다. 수치 그래프로 바꾸지 않습니다.</p>
     <details class="acc raw"><summary>${ui("doc")}원문 전체 그대로 보기</summary><div class="acc-body"><p class="outlook-text">${esc(text)}</p></div></details>`;
   }
   $("results").innerHTML=metaPanel(r)+body+rawDetails(r);
