@@ -17,9 +17,23 @@ const state = {regions:[], seconds:REFRESH_SECONDS, timer:null, status:null, bus
 const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
 const isMissing = (v) => v === null || v === undefined || v === "";
 const showValue = (v, unit="") => isMissing(v) ? '<span class="missing">미제공</span>' : `${esc(v)}${unit}`;
-const dateLabel = (iso) => new Intl.DateTimeFormat("ko-KR",{month:"numeric",day:"numeric",weekday:"short",timeZone:"Asia/Seoul"}).format(new Date(`${iso}T12:00:00+09:00`));
-const releaseLabel = (v) => `${v.slice(0,4)}.${v.slice(4,6)}.${v.slice(6,8)} ${v.slice(8,10)}:${v.slice(10,12)} KST`;
-const timeLabel = (sec) => sec ? new Date(sec*1000).toLocaleString("ko-KR",{timeZone:"Asia/Seoul",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"}) : "—";
+// ---- 날짜 표기 규칙(모든 화면 공통) ----
+// 예보 날짜 11/15(일) · 발표시각 11/11(화) 06시 · 확인 시각 14:04:20 (오늘이 아니면 날짜 추가)
+const KST_PARTS=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Seoul",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"});
+const KST_WEEKDAY=new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",weekday:"short"});
+function kst(date){const o={};KST_PARTS.formatToParts(date).forEach(p=>{o[p.type]=p.value;});return o;}
+const fmtDate=(iso)=>`${Number(iso.slice(5,7))}/${Number(iso.slice(8,10))}(${KST_WEEKDAY.format(new Date(`${iso}T12:00:00+09:00`))})`;
+const dateLabel=fmtDate, md=fmtDate;
+const tmFcDate=(v)=>new Date(`${v.slice(0,4)}-${v.slice(4,6)}-${v.slice(6,8)}T${v.slice(8,10)}:${v.slice(10,12)}:00+09:00`);
+const fmtRelease=(v)=>`${fmtDate(`${v.slice(0,4)}-${v.slice(4,6)}-${v.slice(6,8)}`)} ${v.slice(8,10)}시`;
+const releaseLabel=(v)=>`${fmtRelease(v)} 발표`;
+function ageText(v){const min=Math.max(0,Math.round((Date.now()-tmFcDate(v).getTime())/60000)); return min<60?`${min}분 전`:`${Math.floor(min/60)}시간 전`;}
+function fmtClock(sec){
+  if(!sec) return "—"; const d=new Date(sec*1000), p=kst(d), t=kst(new Date());
+  const time=`${p.hour}:${p.minute}:${p.second}`;
+  return (p.year===t.year&&p.month===t.month&&p.day===t.day)?time:`${fmtDate(`${p.year}-${p.month}-${p.day}`)} ${p.hour}:${p.minute}`;
+}
+const timeLabel=fmtClock;
 
 async function getJSON(url){
   let response;
@@ -67,7 +81,7 @@ function fillRegions(){
   if(state.regions.some(r=>r.code===saved)) $("region").value=saved;
 }
 function fillReleases(values){
-  $("release").innerHTML=values.map((v,i)=>`<option value="${v}">${i===0?"최신 후보 · ":"이전 발표 · "}${releaseLabel(v)} (${v.slice(8,10)==="06"?"4~10일 후":"5~10일 후"})</option>`).join("");
+  $("release").innerHTML=values.map((v,i)=>`<option value="${v}">${releaseLabel(v)} (${i===0?"최신 · ":""}${v.slice(8,10)==="06"?"4~10일 후":"5~10일 후"})</option>`).join("");
 }
 function resetRelease(){ if(!state.releaseChosenByUser) $("release").selectedIndex=0; state.fallbackFrom=null; }
 function updateRegionDetail(){
@@ -110,7 +124,7 @@ function showMessage(text,type="warning"){const el=$("message"); el.className=`a
 function hideMessage(){$("message").className="alert hidden";}
 // 다음 자동 확인 시각. 서버가 알려 준 대기 시간(retryAfter)이 있으면 그 값을 따른다.
 function schedule(seconds,floor=REFRESH_SECONDS){ state.seconds=Math.min(Math.max(floor,Number(seconds)||REFRESH_SECONDS),3600); }
-function clearStatus(){ ["status-release","status-success","status-checked","status-source"].forEach(id=>$(id).textContent="—"); }
+function clearStatus(){ ["status-release","status-release-sub","status-checked","status-source"].forEach(id=>$(id).textContent="—"); }
 
 const WAIT_CODES = new Set(["cooldown","backoff","inflight_failed"]);
 async function refresh(manual){
@@ -167,10 +181,9 @@ function tryOlderRelease(reason, retryAfter){
 }
 function markStale(){ const head=document.querySelector("#results .panel"); if(head && !head.querySelector(".stale-badge")) head.insertAdjacentHTML("afterbegin",'<span class="badge stale-badge">이전 자료</span>'); }
 function updateMeta(result,meta){
-  $("status-release").textContent=releaseLabel(result.requestedRelease);
-  $("status-success").textContent=timeLabel(meta.fetchedAt);
-  $("status-checked").textContent=new Date(meta.checkedAt).toLocaleString("ko-KR",{timeZone:"Asia/Seoul",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"});
-  $("status-source").textContent={network:"기상청 API 새 조회",fresh:"서버 캐시(30초 이내)",shared:"동시 요청 공유"}[meta.cache]||"서버 캐시(이전 자료)";
+  $("status-release").textContent=fmtRelease(result.requestedRelease); $("status-release-sub").textContent=`${ageText(result.requestedRelease)} 발표`;
+  $("status-checked").textContent=fmtClock(new Date(meta.checkedAt).getTime()/1000);
+  $("status-source").textContent=meta.cache==="network"?"기상청 새 조회":`서버 캐시 · 기상청 조회 ${fmtClock(meta.fetchedAt)}`;
   updateUsage(meta.usage,meta.warning);
 }
 
@@ -218,8 +231,6 @@ const UI_ICON={
   spark:'<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>'
 };
 const ui=(name,cls="")=>`<svg class="ui-ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${UI_ICON[name]||""}</svg>`;
-const md=(iso)=>`${Number(iso.slice(5,7))}/${Number(iso.slice(8,10))}`;
-const weekday=(iso)=>new Intl.DateTimeFormat("ko-KR",{weekday:"short",timeZone:"Asia/Seoul"}).format(new Date(`${iso}T12:00:00+09:00`));
 const slot=(r)=>`${md(r.date)}${r.period&&r.period!=="하루"?` ${r.period}`:""}`;
 const HAS_PRECIP=/비|눈|소나기/;
 
@@ -266,10 +277,10 @@ function metaPanel(result){
   const rows=Array.isArray(result.data)?result.data:[];
   const dates=[...new Set(rows.map(r=>r.date))];
   const rel=result.requestedRelease;
-  const chips=[`${ui("calendar")}${Number(rel.slice(4,6))}/${Number(rel.slice(6,8))} ${rel.slice(8,10)}시 발표`];
-  if(dates.length) chips.push(`${md(dates[0])} ~ ${md(dates[dates.length-1])} · ${dates.length}일`);
+  const chips=[];
+  if(dates.length) chips.push(`${ui("calendar")}예보 ${md(dates[0])} ~ ${md(dates[dates.length-1])} · ${dates.length}일`);
   chips.push(`<span class="${result.codeComparison==="mismatch"?"bad":""}">${esc(compare)}</span>`);
-  const facts=`<li>요청에 사용한 발표시각(tmFc) <b>${esc(releaseLabel(rel))}</b> — 응답에는 발표시각 필드가 없어 요청값을 따로 보관한 것입니다.</li>
+  const facts=`<li>요청에 사용한 발표시각 <b>${esc(releaseLabel(rel))}</b> (tmFc <span class="code">${esc(rel)}</span>) — 응답에는 발표시각 필드가 없어 요청값을 따로 보관한 것입니다.</li>
     ${Array.isArray(result.data)?`<li>가이드 기준 06시 발표는 4~10일 후, 18시 발표는 5~10일 후 예보입니다.</li>
     <li>API totalCount <b>${esc(result.totalCount)}</b>건 → 한 항목 안의 날짜별 필드를 펼쳐 <b>${rows.length}</b>개 행으로 표시합니다. 두 수는 다를 수 있습니다.</li>`:""}
     <li>제공기관 결과코드 ${esc(result.providerResult?.code||"—")} ${esc(result.providerResult?.message||"")}</li>
@@ -301,7 +312,7 @@ function selectTab(btn){
 // ---- 날짜별 타임라인 (육상·해상) ----
 function timeline(rows,cell){
   return `<div class="timeline" role="list">${groupByDate(rows).map(([date,items],i)=>`<article class="day" role="listitem" style="--i:${i}">
-    <header><strong>${md(date)}</strong><span>${esc(weekday(date))} · ${esc(items[0].dayOffset)}일 후</span></header>
+    <header><strong>${md(date)}</strong><span>발표일 +${esc(items[0].dayOffset)}일</span></header>
     <div class="periods${items.length===1?" single":""}">${items.map(cell).join("")}</div></article>`).join("")}</div>`;
 }
 function weatherLine(text){return `<div class="wx-line">${wxIcon(text,"lg")}<span class="wx-text">${showValue(text)}</span></div>`;}

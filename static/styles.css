@@ -183,3 +183,10 @@ body.combo-lock{overflow:hidden}
 .status-strip strong.cd{display:flex;align-items:center;gap:.45rem}.status-strip .cd span{display:inline}
 .controls{grid-template-columns:3fr 2fr}
 @media(max-width:760px){.controls{grid-template-columns:1fr}}
+
+/* 30: 날짜 표기 통일, 상태 칸 4개 */
+.status-strip{grid-template-columns:repeat(4,1fr)}
+.status-strip small.sub{display:block;font-size:.74rem;color:var(--muted);margin-top:.15rem;font-weight:500;line-height:1.35}
+.opt-tag{font-size:.78rem;color:var(--muted);font-weight:600}
+@media(max-width:900px){.status-strip{grid-template-columns:1fr 1fr}}
+@media(max-width:430px){.status-strip{grid-template-columns:1fr 1fr}.status-strip div{padding:.8rem}}

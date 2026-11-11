@@ -11,8 +11,10 @@
 
   // "서울 (11B10101)" 형태는 이름과 코드를 나누어 보여 준다. 그 밖의 문구는 그대로 둔다.
   function labelHtml(text){
-    const m=String(text).match(/^(.*\S)\s+\(([A-Za-z0-9]+)\)$/);
-    return m?`<span class="opt-name">${escHtml(m[1])}</span><span class="opt-code">${escHtml(m[2])}</span>`:`<span class="opt-name">${escHtml(text)}</span>`;
+    const m=String(text).match(/^(.*\S)\s+\(([^)]+)\)$/);
+    if(!m) return `<span class="opt-name">${escHtml(text)}</span>`;
+    const isCode=/^[A-Za-z0-9]+$/.test(m[2]);  // 영문·숫자만이면 지역 코드, 그 밖은 보조 설명
+    return `<span class="opt-name">${escHtml(m[1])}</span><span class="${isCode?"opt-code":"opt-tag"}">${escHtml(m[2])}</span>`;
   }
 
   window.enhanceSelect=function(select,{label,searchable=false,placeholder="검색"}={}){
