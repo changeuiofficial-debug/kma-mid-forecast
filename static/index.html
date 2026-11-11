@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="기상청 중기예보 네 기능을 지역별로 조회하고 그래프와 표로 확인합니다.">
   <title>기상청 중기예보</title>
-  <link rel="stylesheet" href="/styles.css?v=27">
+  <link rel="stylesheet" href="/styles.css?v=28">
 </head>
 <body>
   <a class="skip" href="#main">본문으로 건너뛰기</a>
@@ -34,7 +34,7 @@
     <section class="control-card" aria-labelledby="query-title">
       <div class="section-heading">
         <div><p class="step">조회 조건</p><h2 id="query-title">지역과 발표시각</h2></div>
-        <button id="refresh" class="primary" type="button">지금 확인</button>
+        <button id="refresh" class="primary" type="button"><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>지금 확인</button>
       </div>
       <div class="controls">
         <label>지역 선택<select id="region"></select></label>
@@ -47,7 +47,7 @@
       <div><span>자료 발표시각(요청 tmFc)</span><strong id="status-release">—</strong></div>
       <div><span>기상청 마지막 성공 조회</span><strong id="status-success">—</strong></div>
       <div><span>마지막 확인시각</span><strong id="status-checked">—</strong></div>
-      <div><span>다음 자동 확인</span><strong id="status-countdown">—</strong></div>
+      <div><span>다음 자동 확인</span><strong class="cd"><svg class="ring" viewBox="0 0 20 20" aria-hidden="true"><circle class="ring-bg" cx="10" cy="10" r="8"/><circle id="ring-fg" class="ring-fg" cx="10" cy="10" r="8" pathLength="100"/></svg><span id="status-countdown">—</span></strong></div>
       <div><span>이번 자료 출처</span><strong id="status-source">—</strong></div>
       <div><span>최근 24시간 앱 외부 호출</span><strong id="status-usage">—</strong></div>
     </section>
@@ -84,6 +84,6 @@
     </form>
   </aside>
   <footer>출처: 기상청 중기예보 조회서비스 · 공공데이터포털</footer>
-  <script src="/app.js?v=27" defer></script>
+  <script src="/app.js?v=28" defer></script>
 </body>
 </html>

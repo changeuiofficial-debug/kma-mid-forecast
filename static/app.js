@@ -37,13 +37,13 @@ function setupPage(){
 }
 
 async function initialize(){
-  setupPage();
+  setupPage(); setupInteractions();
   try{
     const [status,regions]=await Promise.all([getJSON("/api/status"),getJSON("/api/regions")]);
     state.status=status; state.regions=regions[page];
     fillRegions(); fillReleases(status.releaseCandidates); updateKeyAlert(status); updateUsage(status.usage,status.warning); updateAdminAlert(status);
-    $("region").addEventListener("change",()=>{saveRegion($("region").value); updateRegionDetail(); state.lastGood=null; clearStatus(); resetRelease(); refresh(true);});
-    $("release").addEventListener("change",()=>{state.releaseChosenByUser=true; state.lastGood=null; clearStatus(); refresh(true);});
+    $("region").addEventListener("change",()=>{saveRegion($("region").value); updateRegionDetail(); state.lastGood=null; clearStatus(); $("results").classList.add("is-switching"); resetRelease(); refresh(true);});
+    $("release").addEventListener("change",()=>{state.releaseChosenByUser=true; state.lastGood=null; clearStatus(); $("results").classList.add("is-switching"); refresh(true);});
     $("refresh").addEventListener("click",()=>refresh(true));
     document.addEventListener("visibilitychange",()=>{ if(!document.hidden && state.autoEnabled && state.seconds<=0) refresh(false); });
     window.addEventListener("pagehide",()=>{ clearInterval(state.timer); state.timer=null; });
@@ -80,7 +80,7 @@ function updateKeyAlert(s){
   위치: <span class="code">${esc(s.keyFile||"server.py와 같은 폴더의 KEY.env")}</span>${hint}`;
 }
 function renderKeyNeeded(s){
-  $("results").innerHTML=`<section class="panel"><h2>아직 조회할 수 없습니다</h2><p>서버에 인증키가 없어서 기상청 API를 호출하지 않았습니다. 지역·발표시각 선택과 화면 구조는 그대로 사용할 수 있습니다.</p>
+  state.renderedKey=null; $("results").innerHTML=`<section class="panel"><h2>아직 조회할 수 없습니다</h2><p>서버에 인증키가 없어서 기상청 API를 호출하지 않았습니다. 지역·발표시각 선택과 화면 구조는 그대로 사용할 수 있습니다.</p>
   <ol class="steps"><li>공공데이터포털에서 ‘기상청_중기예보 조회서비스’ 활용신청 후 일반 인증키를 발급받습니다.</li>
   <li>${esc(s.keyFile||"KEY.env")} 파일에 <span class="code">KMA_SERVICE_KEY=발급받은_실제_인증키</span>를 저장합니다.</li>
   <li>서버 창에서 Ctrl+C로 종료한 뒤 서버실행.cmd를 다시 실행합니다.</li></ol></section>`;
@@ -98,9 +98,10 @@ function tick(){
   if(!state.autoEnabled) return;
   if(document.hidden){$("status-countdown").textContent="숨긴 탭 · 일시정지"; return;}
   if(state.busy){$("status-countdown").textContent="확인 중"; return;}
-  state.seconds=Math.max(0,state.seconds-1); $("status-countdown").textContent=`${state.seconds}초 후`;
+  state.seconds=Math.max(0,state.seconds-1); $("status-countdown").textContent=`${state.seconds}초 후`; updateRing();
   if(state.seconds===0) refresh(false);
 }
+function updateRing(){const ring=$("ring-fg"); if(!ring) return; const left=Math.min(1,state.seconds/REFRESH_SECONDS); ring.style.strokeDashoffset=String(100-left*100);}
 function showMessage(text,type="warning"){const el=$("message"); el.className=`alert ${type}`; el.textContent=text;}
 function hideMessage(){$("message").className="alert hidden";}
 // 다음 자동 확인 시각. 서버가 알려 준 대기 시간(retryAfter)이 있으면 그 값을 따른다.
@@ -110,13 +111,20 @@ function clearStatus(){ ["status-release","status-success","status-checked","sta
 const WAIT_CODES = new Set(["cooldown","backoff","inflight_failed"]);
 async function refresh(manual){
   if(state.busy||(document.hidden&&!manual)) return;
-  state.busy=true; $("refresh").disabled=true;
+  state.busy=true; $("refresh").disabled=true; $("refresh").classList.add("loading");
   const feature=encodeURIComponent(page), region=encodeURIComponent($("region").value), tmFc=encodeURIComponent($("release").value);
   try{
     const body=await getJSON(`/api/forecast?feature=${feature}&region=${region}&tmFc=${tmFc}`);
     const result=body.result, meta=body.meta;
     state.lastGood={result,meta};
-    render(result); updateMeta(result,meta); hideMessage();
+    const viewKey=`${page}|${result.requestedCode}|${result.requestedRelease}`, sig=JSON.stringify(result.data);
+    if(state.renderedKey!==viewKey || state.renderedSig!==sig){
+      const sameView=state.renderedKey===viewKey;
+      render(result,{animate:!sameView});
+      if(sameView) flashNewBadge();  // 같은 조건인데 값이 바뀌면 새 발표 자료가 반영된 것
+      state.renderedKey=viewKey; state.renderedSig=sig;
+    }else{ document.querySelectorAll(".stale-badge").forEach(n=>n.remove()); }
+    updateMeta(result,meta); hideMessage();
     const hasData=page==="outlook"?Boolean(result.data?.text):Array.isArray(result.data)&&result.data.length>0;
     if(!hasData && tryOlderRelease("최신 발표 후보에 예보 값이 없어", meta.retryAfter)) return;
     if(meta.cache.startsWith("stale")){
@@ -131,17 +139,17 @@ async function refresh(manual){
     if(WAIT_CODES.has(code)){
       const sec=Number(error.info.retryAfter)||REFRESH_SECONDS;
       showMessage(`${error.message} 약 ${sec}초 후 자동으로 다시 확인합니다.`,"info");
-      if(!state.lastGood) $("results").innerHTML=`<section class="panel loading"><h2>조회 대기 중</h2><p>이 앱은 네 기능을 합쳐 기상청 API를 30초에 한 번만 호출합니다. 순서가 되면 자동으로 표시됩니다.</p></section>`;
+      if(!state.lastGood){ state.renderedKey=null; $("results").innerHTML=`<section class="panel loading"><h2>조회 대기 중</h2><p>이 앱은 네 기능을 합쳐 기상청 API를 30초에 한 번만 호출합니다. 순서가 되면 자동으로 표시됩니다.</p></section>`; }
       schedule(sec,3); return;
     }
     const prefix={provider_auth:"[인증·활용신청 오류] ",provider_limit:"[제공기관 호출 제한] ",provider_limit_halt:"[외부 호출 중지] ",app_limit:"[앱 호출 상한] ",
       network:"[네트워크·제공기관 연결 오류] ",local_server_down:"[로컬 서버 연결 실패] ",no_data:"[데이터 없음] ",invalid_response:"[응답 형식 오류] "}[code]||(code.startsWith("key_")?"[인증키 미설정] ":"");
     if(state.lastGood){ showMessage(`${prefix}${error.message} 아래는 이전 정상 자료입니다(기상청 마지막 성공 조회: ${timeLabel(state.lastGood.meta.fetchedAt)}).`,"error"); markStale(); }
-    else { showMessage(prefix+error.message,"error"); $("results").innerHTML=`<section class="panel"><h2>데이터를 표시할 수 없습니다</h2><p>${esc(prefix+error.message)}</p></section>`; }
+    else { state.renderedKey=null; showMessage(prefix+error.message,"error"); $("results").innerHTML=`<section class="panel"><h2>데이터를 표시할 수 없습니다</h2><p>${esc(prefix+error.message)}</p></section>`; }
     if(code==="local_server_down"){ $("status-countdown").textContent="서버 연결 끊김"; }
     schedule(error.info?.retryAfter);
   }finally{
-    state.busy=false; $("refresh").disabled=false;
+    state.busy=false; $("refresh").disabled=false; $("refresh").classList.remove("loading"); $("results").classList.remove("is-switching");
     getJSON("/api/status").then(s=>{state.status=s; updateUsage(s.usage,s.warning); updateAdminAlert(s);}).catch(()=>{});
   }
 }
@@ -162,80 +170,291 @@ function updateMeta(result,meta){
   updateUsage(meta.usage,meta.warning);
 }
 
+// ===================== 조회 결과 시각화 =====================
+// 원칙: 응답에 있는 값만 그린다. 아이콘은 가이드 '하늘상태' 문구와 정확히 같을 때만 붙이고, 원문 글자를 항상 함께 둔다.
+const REDUCED = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)").matches : false;
+const WX_SET = new Set(["맑음","구름많음","구름많고비","구름많고눈","구름많고비/눈","구름많고소나기","흐림","흐리고비","흐리고눈","흐리고비/눈","흐리고소나기"]);
+function wxKind(text){
+  if(isMissing(text)) return null;
+  const t=String(text).replace(/\s+/g,"");
+  if(!WX_SET.has(t)) return null;  // 목록에 없는 문구는 아이콘을 짐작하지 않는다
+  const sky=t==="맑음"?"clear":t.startsWith("구름많")?"partly":"overcast";
+  const pcp=t.includes("비/눈")?"sleet":t.includes("소나기")?"shower":t.includes("비")?"rain":t.includes("눈")?"snow":null;
+  return {sky,pcp};
+}
+const CLOUD="M13 34h22a8 8 0 0 0 .8-15.96A11 11 0 0 0 14.6 20.2 7 7 0 0 0 13 34z";
+function sun(cx,cy,r){
+  let rays=""; for(let k=0;k<8;k++){const a=k*Math.PI/4,c=Math.cos(a),s=Math.sin(a);rays+=`<line x1="${(cx+c*(r+3)).toFixed(1)}" y1="${(cy+s*(r+3)).toFixed(1)}" x2="${(cx+c*(r+6)).toFixed(1)}" y2="${(cy+s*(r+6)).toFixed(1)}"/>`;}
+  return `<g class="sun"><circle cx="${cx}" cy="${cy}" r="${r}"/>${rays}</g>`;
+}
+function precip(type){
+  const drop=(x)=>`<line class="drop" x1="${x}" y1="34" x2="${x-2}" y2="41"/>`;
+  const flake=(x,y)=>`<circle class="flake" cx="${x}" cy="${y}" r="2"/>`;
+  if(type==="rain") return drop(17)+drop(25)+drop(33);
+  if(type==="shower") return `<g class="heavy">${drop(19)+drop(28)}</g>`;
+  if(type==="snow") return flake(17,37)+flake(25,41)+flake(33,37);
+  return drop(18)+flake(26,39)+drop(34); // 비/눈
+}
+function wxIcon(text,size=""){
+  const k=wxKind(text); if(!k) return "";
+  const up=k.pcp?' transform="translate(0 -5)"':"";
+  let g=k.sky==="clear"?sun(24,24,8):(k.sky==="partly"?`<g${up}>${sun(31,15,6)}</g>`:"")+`<path class="${k.sky==="overcast"?"cloud dark":"cloud"}" d="${CLOUD}"${up}/>`;
+  if(k.pcp) g+=precip(k.pcp);
+  return `<svg class="wx ${size}" viewBox="0 0 48 48" aria-hidden="true">${g}</svg>`;
+}
+const UI_ICON={
+  drop:'<path d="M12 3.5s6 6.4 6 10.6a6 6 0 0 1-12 0C6 9.9 12 3.5 12 3.5z"/>',
+  thermo:'<path d="M10 14.5V5a2 2 0 0 1 4 0v9.5a4 4 0 1 1-4 0z"/><path d="M12 9.5v7"/>',
+  calendar:'<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  alert:'<path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4.5M12 17.2v.1"/>',
+  wave:'<path d="M2 9c2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2 2.5 2 5 2"/><path d="M2 15c2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2 2.5 2 5 2"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.6v.1"/>',
+  umbrella:'<path d="M3 12.5a9 9 0 0 1 18 0z"/><path d="M12 12.5v6a2 2 0 0 0 4 0"/>',
+  doc:'<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>',
+  spark:'<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>'
+};
+const ui=(name,cls="")=>`<svg class="ui-ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${UI_ICON[name]||""}</svg>`;
+const md=(iso)=>`${Number(iso.slice(5,7))}/${Number(iso.slice(8,10))}`;
+const weekday=(iso)=>new Intl.DateTimeFormat("ko-KR",{weekday:"short",timeZone:"Asia/Seoul"}).format(new Date(`${iso}T12:00:00+09:00`));
+const slot=(r)=>`${md(r.date)}${r.period&&r.period!=="하루"?` ${r.period}`:""}`;
+const HAS_PRECIP=/비|눈|소나기/;
+
+function groupByDate(rows){const map=new Map();rows.forEach(r=>{if(!map.has(r.date))map.set(r.date,[]);map.get(r.date).push(r);});return [...map.entries()];}
+function extreme(rows,key,pick){
+  const valid=rows.filter(r=>!isMissing(r[key]));
+  if(!valid.length) return null;
+  const value=pick(...valid.map(r=>r[key])); const at=valid.filter(r=>r[key]===value).map(slot);
+  return {value, where: at.length>2?`${at[0]} 외 ${at.length-1}구간`:at.join(", ")};
+}
+function stat(i,icon,label,value,unit,sub){
+  const body=isMissing(value)?'<span class="missing">미제공</span>':`<span data-count="${esc(value)}">${esc(value)}</span><small>${esc(unit)}</small>`;
+  return `<div class="stat" style="--i:${i}"><span class="stat-ic">${icon}</span><span class="stat-label">${esc(label)}</span><strong>${body}</strong><span class="stat-sub">${esc(sub||"")}</span></div>`;
+}
+function summaryFor(result){
+  const rows=Array.isArray(result.data)?result.data:[];
+  if(!rows.length) return "";
+  const precipCount=rows.filter(r=>HAS_PRECIP.test(r.weather||"")).length;
+  let cards=[];
+  if(page==="land"){
+    const hi=extreme(rows,"rainProbability",Math.max), lo=extreme(rows,"rainProbability",Math.min);
+    cards=[stat(0,ui("drop"),"가장 높은 강수확률",hi?.value,"%",hi?.where),
+      stat(1,ui("umbrella"),"비·눈 표현이 있는 구간",precipCount,`/${rows.length}구간`,"날씨 문구 기준"),
+      stat(2,ui("drop","soft"),"가장 낮은 강수확률",lo?.value,"%",lo?.where)];
+  }else if(page==="temperature"){
+    const hi=extreme(rows,"max",Math.max), lo=extreme(rows,"min",Math.min);
+    const spans=rows.filter(r=>!isMissing(r.min)&&!isMissing(r.max)).map(r=>({...r,span:r.max-r.min}));
+    const sp=extreme(spans,"span",Math.max);
+    cards=[stat(0,ui("thermo","warm"),"기간 중 예상 최고기온",hi?.value,"℃",hi?.where),
+      stat(1,ui("thermo","cool"),"기간 중 예상 최저기온",lo?.value,"℃",lo?.where),
+      stat(2,ui("spark"),"하루 기온 폭이 가장 큰 날",sp?.value,"℃",sp?.where)];
+  }else if(page==="sea"){
+    const hi=extreme(rows,"waveMax",Math.max), lo=extreme(rows,"waveMin",Math.min);
+    cards=[stat(0,ui("wave","high"),"가장 높은 최고 예상파고",hi?.value,"m",hi?.where),
+      stat(1,ui("wave"),"가장 낮은 최저 예상파고",lo?.value,"m",lo?.where),
+      stat(2,ui("umbrella"),"비·눈 표현이 있는 구간",precipCount,`/${rows.length}구간`,"날씨 문구 기준")];
+  }
+  return cards.length?`<div class="stats">${cards.join("")}</div><p class="small">요약 카드는 응답 값 중 가장 큰 값과 작은 값을 고른 것이며, 새로 계산한 예보가 아닙니다.</p>`:"";
+}
+
 function metaPanel(result){
   const selected=state.regions.find(r=>r.code===result.requestedCode);
   const compare={match:"요청·응답 코드 일치",mismatch:"요청·응답 코드 불일치",not_returned:"응답에 코드 없음 · 비교 불가"}[result.codeComparison];
   const rows=Array.isArray(result.data)?result.data:[];
   const dates=[...new Set(rows.map(r=>r.date))];
-  const period=dates.length?`${dateLabel(dates[0])} ~ ${dateLabel(dates[dates.length-1])} (${dates.length}일)`:"—";
-  const counts=Array.isArray(result.data)?`<li>API totalCount <b>${esc(result.totalCount)}</b>건 → 한 항목 안의 날짜별 필드를 펼쳐 <b>${rows.length}</b>개 행으로 표시 (두 수는 다를 수 있습니다)</li>`:"";
-  return `<section class="panel"><div class="panel-head"><div><p class="step">조회 결과</p><h2>${esc(selected?.name||result.requestedCode)}</h2>
-  <p>${esc(CONFIG[page].codeName)} <span class="code">${esc(result.requestedCode)}</span> · ${esc(selected?.scope||"")}</p></div>
-  <span class="badge ${result.codeComparison==="mismatch"?"bad":""}">${compare}</span></div>
-  <ul class="facts"><li>요청에 사용한 발표시각(tmFc) <b>${esc(releaseLabel(result.requestedRelease))}</b> — 응답에는 발표시각 필드가 없어 요청값을 별도로 보관한 것입니다.</li>
-  ${Array.isArray(result.data)?`<li>실제 응답의 예보 기간: <b>${esc(period)}</b> (가이드 기준 06시 발표 4~10일 후, 18시 발표 5~10일 후)</li>`:""}${counts}
-  <li>제공기관 결과코드 ${esc(result.providerResult?.code||"—")} ${esc(result.providerResult?.message||"")}</li></ul>`;
+  const rel=result.requestedRelease;
+  const chips=[`${ui("calendar")}${Number(rel.slice(4,6))}/${Number(rel.slice(6,8))} ${rel.slice(8,10)}시 발표`];
+  if(dates.length) chips.push(`${md(dates[0])} ~ ${md(dates[dates.length-1])} · ${dates.length}일`);
+  chips.push(`<span class="${result.codeComparison==="mismatch"?"bad":""}">${esc(compare)}</span>`);
+  const facts=`<li>요청에 사용한 발표시각(tmFc) <b>${esc(releaseLabel(rel))}</b> — 응답에는 발표시각 필드가 없어 요청값을 따로 보관한 것입니다.</li>
+    ${Array.isArray(result.data)?`<li>가이드 기준 06시 발표는 4~10일 후, 18시 발표는 5~10일 후 예보입니다.</li>
+    <li>API totalCount <b>${esc(result.totalCount)}</b>건 → 한 항목 안의 날짜별 필드를 펼쳐 <b>${rows.length}</b>개 행으로 표시합니다. 두 수는 다를 수 있습니다.</li>`:""}
+    <li>제공기관 결과코드 ${esc(result.providerResult?.code||"—")} ${esc(result.providerResult?.message||"")}</li>
+    <li>${esc(CONFIG[page].codeName)} <span class="code">${esc(result.requestedCode)}</span> · 적용 범위: ${esc(selected?.scope||"")}</li>`;
+  return `<section class="panel result-head">
+    <div class="result-title"><div><p class="step">조회 결과</p><h2>${esc(selected?.name||result.requestedCode)} <span class="code">${esc(result.requestedCode)}</span></h2></div>
+    <span id="new-badge" class="badge new hidden" role="status">새 예보 반영</span></div>
+    <div class="chips">${chips.map(c=>`<span class="chip">${c}</span>`).join("")}</div>
+    ${summaryFor(result)}
+    <details class="acc"><summary>${ui("info")}조회 정보 자세히</summary><div class="acc-body"><ul class="facts">${facts}</ul></div></details>
+  </section>`;
 }
-function rawDetails(result){return `<details><summary>제공기관 원문 필드 보기</summary><pre>${esc(JSON.stringify(result.rawItem,null,2))}</pre></details></section>`;}
-function render(result){if(page==="outlook")renderOutlook(result);else if(page==="land")renderLand(result);else if(page==="temperature")renderTemperature(result);else renderSea(result);}
-function renderOutlook(r){
-  const text=r.data?.text;
-  const paragraphs=text?text.split(/\n+/).map(line=>line.trim()).filter(Boolean).map(line=>`<p>${esc(line)}</p>`).join(""):'<p class="missing">전망문(wfSv)이 제공되지 않았습니다.</p>';
-  $("results").innerHTML=metaPanel(r)+`<div class="outlook-text">${paragraphs}</div><p class="small">전망문은 원문 그대로 줄 단위로만 나누어 표시하며, 원문에 없는 수치를 만들거나 그래프로 바꾸지 않습니다.</p>${rawDetails(r)}`;
+function rawDetails(result){return `<details class="acc raw"><summary>${ui("doc")}제공기관 원문 필드 보기</summary><div class="acc-body"><pre>${esc(JSON.stringify(result.rawItem,null,2))}</pre></div></details>`;}
+
+// 그래프·표 전환 탭. 선택한 탭은 30초 갱신 뒤에도 유지한다.
+state.tabs = state.tabs || {};
+function tabs(id,items){
+  const sel=Math.min(state.tabs[id]??0,items.length-1);
+  return `<div class="tabs" data-tabs="${id}"><div class="tablist" role="tablist" aria-label="보기 방식">${items.map((t,i)=>`<button type="button" role="tab" id="${id}-t${i}" aria-controls="${id}-p${i}" aria-selected="${i===sel}" tabindex="${i===sel?0:-1}" data-index="${i}">${t.label}</button>`).join("")}</div>
+  ${items.map((t,i)=>`<div class="tabpanel" role="tabpanel" id="${id}-p${i}" aria-labelledby="${id}-t${i}"${i===sel?"":" hidden"}>${t.html}</div>`).join("")}</div>`;
+}
+function selectTab(btn){
+  const box=btn.closest(".tabs"); const id=box.dataset.tabs; const idx=Number(btn.dataset.index);
+  state.tabs[id]=idx;
+  box.querySelectorAll('[role="tab"]').forEach((b,i)=>{b.setAttribute("aria-selected",String(i===idx));b.tabIndex=i===idx?0:-1;});
+  box.querySelectorAll('[role="tabpanel"]').forEach((p,i)=>{p.hidden=i!==idx; if(i===idx){p.classList.remove("swap");void p.offsetWidth;p.classList.add("swap");}});
 }
 
-// ---- 그래프: SVG로 직접 그린다. 결측값은 0으로 그리지 않고 선을 끊는다(보간 없음). ----
-function chartFrame({rows,min,max,series,unit="",axisTitle="",height=280}){
+// ---- 날짜별 타임라인 (육상·해상) ----
+function timeline(rows,cell){
+  return `<div class="timeline" role="list">${groupByDate(rows).map(([date,items],i)=>`<article class="day" role="listitem" style="--i:${i}">
+    <header><strong>${md(date)}</strong><span>${esc(weekday(date))} · ${esc(items[0].dayOffset)}일 후</span></header>
+    <div class="periods${items.length===1?" single":""}">${items.map(cell).join("")}</div></article>`).join("")}</div>`;
+}
+function weatherLine(text){return `<div class="wx-line">${wxIcon(text,"lg")}<span class="wx-text">${showValue(text)}</span></div>`;}
+function rainGauge(v){
+  if(isMissing(v)) return '<div class="gauge"><span class="gauge-label missing">강수확률 미제공</span></div>';
+  const tier=v>=60?"r2":v>=30?"r1":"r0";
+  return `<div class="gauge ${tier}" role="img" aria-label="강수확률 ${esc(v)}%"><span class="gauge-label">${ui("drop")}${esc(v)}%</span><span class="gauge-track"><span class="gauge-fill" style="--v:${Math.max(0,Math.min(100,Number(v)))}%"></span></span></div>`;
+}
+const WAVE_SCALE=4;
+function waveTier(max){return isMissing(max)?"":max>=3?"high":max>=1.5?"mid":"low";}
+function waveBar(lo,hi){
+  if(isMissing(lo)&&isMissing(hi)) return '<div class="wave-mini"><span class="missing">예상파고 미제공</span></div>';
+  const scale=Math.max(WAVE_SCALE,Number(hi)||0,Number(lo)||0);
+  const a=isMissing(lo)?Number(hi):Number(lo), b=isMissing(hi)?Number(lo):Number(hi);
+  const label=`${isMissing(lo)?"미제공":lo}~${isMissing(hi)?"미제공":hi}m`;
+  return `<div class="wave-mini ${waveTier(hi)}" role="img" aria-label="예상파고 ${esc(label)}"><span class="gauge-label">${ui("wave")}${esc(label)}</span>
+    <span class="gauge-track"><span class="wave-fill" style="--a:${(a/scale*100).toFixed(1)}%;--b:${(Math.max(b-a,0.08)/scale*100).toFixed(1)}%"></span></span></div>`;
+}
+
+// ---- SVG 그래프: 결측값은 0으로 그리지 않고 '미제공'으로 표시한다(보간 없음) ----
+function chartFrame({rows,min,max,series,unit="",axisTitle="",height=280,tip,defs=""}){
   if(!rows.length) return '<p class="missing">그래프에 표시할 값이 없습니다.</p>';
-  const W=Math.max(680,rows.length*78),H=height,p={l:56,r:44,t:28,b:58},iw=W-p.l-p.r,ih=H-p.t-p.b,range=(max-min)||1;
-  const x=i=>p.l+(rows.length===1?iw/2:i*iw/(rows.length-1)), y=v=>p.t+(max-v)*ih/range;
+  const W=Math.max(680,rows.length*78),H=height,p={l:56,r:16,t:28,b:58},iw=W-p.l-p.r,ih=H-p.t-p.b,range=(max-min)||1;
+  // 날짜마다 같은 폭의 칸을 두고 가운데에 그린다(양 끝 값이 축 글자와 겹치지 않게).
+  const colW=iw/rows.length, x=i=>p.l+colW*(i+0.5), y=v=>p.t+(max-v)*ih/range;
   let grid=""; for(let i=0;i<=4;i++){const value=min+(max-min)*i/4,yy=y(value);grid+=`<line class="grid-line" x1="${p.l}" y1="${yy}" x2="${W-p.r}" y2="${yy}"/><text class="axis-text" x="${p.l-8}" y="${yy+4}" text-anchor="end">${+value.toFixed(1)}${unit}</text>`;}
   const labels=rows.map((r,i)=>`<text class="axis-text" x="${x(i)}" y="${H-30}" text-anchor="middle">${esc(dateLabel(r.date))}</text><text class="axis-text" x="${x(i)}" y="${H-14}" text-anchor="middle">${esc(r.period||"")}</text>`).join("");
   const marks=series.map(s=>s.render({rows,x,y,min,max,H,W,p})).join("");
-  return `<div class="chart-wrap"><svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(series.map(s=>s.label).join(", "))} 그래프 (단위 ${esc(unit)})"><text class="axis-title" x="${p.l-44}" y="14">${esc(axisTitle)}</text>${grid}${marks}${labels}</svg></div>`;
+  const cols=tip?rows.map((r,i)=>`<g class="col"><line class="guide" x1="${x(i)}" y1="${p.t}" x2="${x(i)}" y2="${H-p.b}"/><rect class="hit" x="${x(i)-colW/2}" y="${p.t-10}" width="${colW}" height="${ih+20}" data-tip="${esc(tip(r))}"/></g>`).join(""):"";
+  return `<div class="chart-wrap"><svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(axisTitle)} 그래프. 같은 값은 수치표 탭에서 볼 수 있습니다."><defs>${defs}</defs><text class="axis-title" x="${p.l-48}" y="14">${esc(axisTitle)}</text>${grid}${marks}${labels}${cols}</svg><div class="tip" hidden></div></div>`;
 }
 const missingMark=(x,y)=>`<text class="missing-mark" x="${x}" y="${y}" text-anchor="middle">미제공</text>`;
-const lineSeries=(key,label,cls,unit)=>({label,render:({rows,x,y,p,H})=>{
-  let segments=[],current=[],gaps="";
-  rows.forEach((r,i)=>{const v=r[key];if(isMissing(v)){if(current.length)segments.push(current);current=[];gaps+=cls==="min"?missingMark(x(i),H-p.b-6):"";}else current.push([x(i),y(v),v,r]);});
-  if(current.length)segments.push(current);
-  return segments.map(seg=>`<polyline class="line-${cls}" points="${seg.map(q=>`${q[0]},${q[1]}`).join(" ")}"/>${seg.map(q=>`<g class="pt"><circle class="dot-${cls}" cx="${q[0]}" cy="${q[1]}" r="5"><title>${esc(dateLabel(q[3].date))} ${label} ${q[2]}${unit}</title></circle><text class="val val-${cls}" x="${q[0]}" y="${q[1]+(cls==="min"?18:-10)}" text-anchor="middle">${q[2]}</text></g>`).join("")}`).join("")+gaps;}});
-const barSeries=(key,label)=>({label,render:({rows,x,y,p,H})=>rows.map((r,i)=>{const v=r[key];if(isMissing(v))return missingMark(x(i),H-p.b-6);const yy=y(v),base=y(0);return `<g class="pt"><rect class="bar" x="${x(i)-13}" y="${Math.min(yy,base-1)}" width="26" height="${Math.max(1,base-yy)}" rx="3"><title>${esc(dateLabel(r.date))} ${esc(r.period)} ${label} ${v}%</title></rect><text class="val" x="${x(i)}" y="${Math.min(yy,base-1)-6}" text-anchor="middle">${v}%</text></g>`;}).join("")});
+const barSeries=(key)=>({render:({rows,x,y,p,H})=>rows.map((r,i)=>{const v=r[key];if(isMissing(v))return missingMark(x(i),H-p.b-6);const yy=y(v),base=y(0);
+  return `<g><rect class="bar grow ${v>=60?"r2":v>=30?"r1":"r0"}" style="--i:${i}" x="${x(i)-13}" y="${Math.min(yy,base-1)}" width="26" height="${Math.max(1,base-yy)}" rx="4"/><text class="val fade" style="--i:${i}" x="${x(i)}" y="${Math.min(yy,base-1)-6}" text-anchor="middle">${v}%</text></g>`;}).join("")});
+const rangeSeries=(loKey,hiKey,unit,fill)=>({render:({rows,x,y,p,H})=>rows.map((r,i)=>{
+  const lo=r[loKey],hi=r[hiKey];
+  if(isMissing(lo)&&isMissing(hi)) return missingMark(x(i),H-p.b-6);
+  if(isMissing(lo)||isMissing(hi)){const v=isMissing(lo)?hi:lo,cls=isMissing(lo)?"max":"min";return `<g><circle class="dot-${cls} fade" style="--i:${i}" cx="${x(i)}" cy="${y(v)}" r="5"/><text class="val fade" style="--i:${i}" x="${x(i)+10}" y="${y(v)+4}">${v}${unit}</text><text class="missing-mark" x="${x(i)}" y="${H-p.b-6}" text-anchor="middle">${cls==="min"?"최고 미제공":"최저 미제공"}</text></g>`;}
+  const top=y(hi),bot=y(lo);
+  return `<g><rect class="range grow-c" style="--i:${i}" x="${x(i)-11}" y="${top}" width="22" height="${Math.max(3,bot-top)}" rx="11" fill="url(#${fill})"/>
+    <text class="val val-max fade" style="--i:${i}" x="${x(i)}" y="${top-8}" text-anchor="middle">${hi}${unit}</text>
+    <text class="val val-min fade" style="--i:${i}" x="${x(i)}" y="${bot+17}" text-anchor="middle">${lo}${unit}</text></g>`;}).join("")});
+function tableFor(rows,heads,values){return `<div class="table-scroll"><table><thead><tr>${heads.map(h=>`<th scope="col">${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${values(r).map(v=>`<td>${isMissing(v)?'<span class="missing">미제공</span>':v}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;}
+const wxCell=(text)=>`<span class="wx-cell">${wxIcon(text,"sm")}${showValue(text)}</span>`;
 
-function groupByDate(rows){const map=new Map();rows.forEach(r=>{if(!map.has(r.date))map.set(r.date,[]);map.get(r.date).push(r);});return [...map.entries()];}
+// ---- 페이지별 렌더 ----
+function render(result,opts={}){
+  const el=$("results");
+  if(page==="outlook")renderOutlook(result);else if(page==="land")renderLand(result);else if(page==="temperature")renderTemperature(result);else renderSea(result);
+  el.classList.remove("is-switching");
+  if(opts.animate && !REDUCED){ el.classList.remove("enter"); void el.offsetWidth; el.classList.add("enter"); clearTimeout(state.enterTimer); state.enterTimer=setTimeout(()=>el.classList.remove("enter"),1800); el.querySelectorAll("[data-count]").forEach(countUp); }
+  observeReveals(el, opts.animate);
+}
+
+const TOPIC_ICON=[[/강수|강우|비|눈/,"umbrella"],[/기온/,"thermo"],[/주말|요일/,"calendar"],[/변동|불확실/,"alert"],[/해상|물결|파고|바다/,"wave"]];
+function parseOutlook(text){
+  const secs=[]; let cur=null;
+  for(const raw of String(text).split(/\r?\n/)){
+    const line=raw.trim(); if(!line) continue;
+    const m=line.match(/^(?:[○◦•●*※]|o)\s*\(([^)]{1,15})\)\s*(.*)$/);
+    if(m){cur={topic:m[1],lines:m[2]?[m[2]]:[]};secs.push(cur);}
+    else if(cur) cur.lines.push(line);
+    else {cur={topic:"개요",lines:[line]};secs.push(cur);}
+  }
+  return secs;
+}
+// 원문에 이미 있는 표현만 강조한다: 날짜는 굵게, 기온·물결 등 숫자 범위에만 형광펜(이스케이프한 뒤 적용).
+function highlight(escaped){
+  return escaped
+    .replace(/(\d{1,2}일\([월화수목금토일]\)(?:\s*(?:오전|오후|새벽|아침|낮|밤))?(?:\s*~\s*\d{1,2}일\([월화수목금토일]\))?)/g,'<strong class="dt">$1</strong>')
+    .replace(/(-?\d+(?:\.\d+)?\s*~\s*-?\d+(?:\.\d+)?\s*(?:℃|°C|mm|m)(?![a-z]))/g,'<mark class="hl hl-num">$1</mark>');
+}
+function renderOutlook(r){
+  const text=r.data?.text;
+  let body;
+  if(!text){ body='<section class="panel"><p class="missing">전망문(wfSv)이 제공되지 않았습니다.</p></section>'; }
+  else{
+    const secs=parseOutlook(text);
+    body=`<div class="ol-grid">${secs.map((s,i)=>{const icon=(TOPIC_ICON.find(([re])=>re.test(s.topic))||[null,"info"])[1];
+      return `<article class="ol-card reveal" style="--i:${i}"><div class="ol-icon ${icon}">${ui(icon)}</div><div class="ol-body"><h3>${esc(s.topic)}</h3>${s.lines.map(l=>`<p>${highlight(esc(l))}</p>`).join("")}</div></article>`;}).join("")}</div>
+    <p class="small">기상청 원문을 표시(○, *) 기준으로 주제별 카드로 나눈 것입니다. 문장은 바꾸지 않았고, 원문에 있는 날짜는 굵게, 숫자 범위에만 형광펜을 칠했습니다. 수치 그래프로 바꾸지 않습니다.</p>
+    <details class="acc raw"><summary>${ui("doc")}원문 전체 그대로 보기</summary><div class="acc-body"><p class="outlook-text">${esc(text)}</p></div></details>`;
+  }
+  $("results").innerHTML=metaPanel(r)+body+rawDetails(r);
+}
 function renderLand(r){
   const rows=r.data||[];
-  const cards=groupByDate(rows).map(([date,items])=>`<article class="weather-card"><span class="date">${esc(dateLabel(date))} · 발표일 기준 ${esc(items[0].dayOffset)}일 후</span>${items.map(x=>`<div class="period-row"><span class="tag">${esc(x.period)}</span><strong>${showValue(x.weather)}</strong><span class="metric">강수확률 ${showValue(x.rainProbability,"%")}</span></div>`).join("")}</article>`).join("");
-  const chart=chartFrame({rows,min:0,max:100,unit:"%",axisTitle:"강수확률(%)",series:[barSeries("rainProbability","강수확률")]});
-  const table=tableFor(rows,["날짜","구분","날씨","강수확률(%)"],x=>[esc(dateLabel(x.date)),esc(x.period),showValue(x.weather),showValue(x.rainProbability,"%")]);
-  $("results").innerHTML=metaPanel(r)+`<div class="cards">${cards||'<p class="missing">예보 데이터가 없습니다.</p>'}</div>${rawDetails(r)}
-  <section class="panel"><div class="panel-head"><div><p class="step">강수확률</p><h2>날짜별 강수확률 (%)</h2></div></div>
-  <div class="legend"><span><i class="rain"></i>강수확률(비·눈이 올 가능성, %)</span><span>강수량(mm)이 아닙니다 · 값이 없으면 ‘미제공’</span></div>${chart}</section>
-  <section class="panel"><h2>예보 수치표</h2>${table}</section>`;
+  const cell=x=>`<div class="period"><span class="tag">${esc(x.period)}</span>${weatherLine(x.weather)}${rainGauge(x.rainProbability)}</div>`;
+  const chart=chartFrame({rows,min:0,max:100,unit:"%",axisTitle:"강수확률(%)",series:[barSeries("rainProbability")],
+    tip:x=>`${dateLabel(x.date)} ${x.period} · ${x.weather||"날씨 미제공"} · 강수확률 ${isMissing(x.rainProbability)?"미제공":x.rainProbability+"%"}`});
+  const table=tableFor(rows,["날짜","구분","날씨","강수확률(%)"],x=>[esc(dateLabel(x.date)),esc(x.period),wxCell(x.weather),showValue(x.rainProbability,"%")]);
+  $("results").innerHTML=metaPanel(r)+
+  `<section class="panel reveal"><div class="panel-head"><div><p class="step">날짜별 예보</p><h2>날씨와 강수확률</h2></div>
+    <div class="legend"><span><i class="rain"></i>강수확률(%) — 강수량(mm)이 아닙니다</span><span>4~7일 후 오전·오후 / 8~10일 후 하루 단위</span></div></div>
+    ${rows.length?timeline(rows,cell):'<p class="missing">예보 데이터가 없습니다.</p>'}</section>
+  <section class="panel reveal">${tabs("land-view",[{label:"강수확률 그래프",html:chart},{label:"수치표",html:table}])}</section>`+rawDetails(r);
 }
 function renderTemperature(r){
   const rows=r.data||[];const values=rows.flatMap(x=>[x.min,x.max]).filter(x=>!isMissing(x));
   // 눈금이 정수로 떨어지도록 범위를 4의 배수로 맞춘다.
-  const min=values.length?Math.floor(Math.min(...values)-2):0,max=values.length?min+Math.ceil((Math.max(...values)+2-min)/4)*4:12;
-  const chart=chartFrame({rows,min,max,unit:"℃",axisTitle:"예상기온(℃)",series:[lineSeries("min","예상 최저기온","min","℃"),lineSeries("max","예상 최고기온","max","℃")]});
+  const min=values.length?Math.floor(Math.min(...values)-3):0,max=values.length?min+Math.ceil((Math.max(...values)+3-min)/4)*4:12;
+  const defs='<linearGradient id="tgrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ef8b45"/><stop offset="1" stop-color="#2f86a6"/></linearGradient>';
+  const chart=chartFrame({rows,min,max,unit:"℃",axisTitle:"예상기온(℃)",defs,series:[rangeSeries("min","max","℃","tgrad")],height:300,
+    tip:x=>`${dateLabel(x.date)} · 예상 최저 ${isMissing(x.min)?"미제공":x.min+"℃"} · 예상 최고 ${isMissing(x.max)?"미제공":x.max+"℃"}`});
   const table=tableFor(rows,["날짜","발표일 기준","예상 최저기온(℃)","예상 최고기온(℃)"],x=>[esc(dateLabel(x.date)),`${Number(x.dayOffset)}일 후`,showValue(x.min,"℃"),showValue(x.max,"℃")]);
-  $("results").innerHTML=metaPanel(r)+`<div class="legend"><span><i class="min"></i>예상 최저기온(taMinN)</span><span><i class="max"></i>예상 최고기온(taMaxN)</span></div>${chart}
-  <p class="small">예보값이며 실제 관측 기온이 아닙니다. 응답의 Low·High 범위 필드(예: taMin5Low)는 절대 기온인지 기준값과의 차이인지 공식 자료로 확인하지 못해 그래프에 쓰지 않았습니다. 원문 필드에서 확인할 수 있습니다.</p>${rawDetails(r)}
-  <section class="panel"><h2>예상기온 수치표</h2>${table}</section>`;
+  $("results").innerHTML=metaPanel(r)+
+  `<section class="panel reveal"><div class="panel-head"><div><p class="step">날짜별 예상기온</p><h2>하루 기온 범위</h2></div>
+    <div class="legend"><span><i class="tband"></i>막대 아래 끝 = 예상 최저(taMinN), 위 끝 = 예상 최고(taMaxN)</span></div></div>
+    ${tabs("temp-view",[{label:"기온 범위 그래프",html:chart},{label:"수치표",html:table}])}
+    <p class="small">예보값이며 실제 관측 기온이 아닙니다. 응답의 Low·High 범위 필드(예: taMin5Low)는 절대 기온인지 기준값과의 차이인지 공식 자료로 확인하지 못해 그래프에 쓰지 않았습니다.</p></section>`+rawDetails(r);
 }
 function renderSea(r){
-  const rows=r.data||[];const values=rows.flatMap(x=>[x.waveMin,x.waveMax]).filter(x=>!isMissing(x)),max=values.length?Math.max(4,Math.ceil((Math.max(...values)+0.5)/4)*4):4;
-  const wave={label:"예상파고 범위",render:({rows,x,y,p,H})=>rows.map((v,i)=>{
-    const lo=!isMissing(v.waveMin), hi=!isMissing(v.waveMax);
-    if(!lo&&!hi) return missingMark(x(i),H-p.b-6);
-    const title=`${dateLabel(v.date)} ${v.period} 최저 ${lo?v.waveMin+"m":"미제공"} · 최고 ${hi?v.waveMax+"m":"미제공"}`;
-    return `<g class="pt"><title>${esc(title)}</title>${lo&&hi?`<line class="wave-range" x1="${x(i)}" y1="${y(v.waveMin)}" x2="${x(i)}" y2="${y(v.waveMax)}"/>`:""}${lo?`<circle class="dot-min" cx="${x(i)}" cy="${y(v.waveMin)}" r="5"/><text class="val val-min" x="${x(i)+10}" y="${y(v.waveMin)+4}">${v.waveMin}</text>`:""}${hi?`<circle class="dot-max" cx="${x(i)}" cy="${y(v.waveMax)}" r="5"/><text class="val val-max" x="${x(i)+10}" y="${y(v.waveMax)+4}">${v.waveMax}</text>`:""}</g>`;}).join("")};
-  const chart=chartFrame({rows,min:0,max,unit:"m",axisTitle:"예상파고(m)",series:[wave]});
-  const table=tableFor(rows,["날짜","구분","날씨","최저 예상파고(m)","최고 예상파고(m)"],x=>[esc(dateLabel(x.date)),esc(x.period),showValue(x.weather),showValue(x.waveMin,"m"),showValue(x.waveMax,"m")]);
-  $("results").innerHTML=metaPanel(r)+`<div class="legend"><span><i class="min"></i>최저 예상파고(whNA…)</span><span><i class="max"></i>최고 예상파고(whNB…)</span><span><i class="range"></i>최저~최고 범위</span></div>${chart}${rawDetails(r)}
-  <section class="panel"><h2>해상예보 수치표</h2>${table}</section>`;
+  const rows=r.data||[];const values=rows.flatMap(x=>[x.waveMin,x.waveMax]).filter(x=>!isMissing(x)),max=values.length?Math.max(4,Math.ceil((Math.max(...values)+0.5)/2)*2):4;
+  const cell=x=>`<div class="period"><span class="tag">${esc(x.period)}</span>${weatherLine(x.weather)}${waveBar(x.waveMin,x.waveMax)}</div>`;
+  const defs='<linearGradient id="wgrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#104b60"/><stop offset="1" stop-color="#7cc7d8"/></linearGradient>';
+  const chart=chartFrame({rows,min:0,max,unit:"m",axisTitle:"예상파고(m)",defs,series:[rangeSeries("waveMin","waveMax","m","wgrad")],
+    tip:x=>`${dateLabel(x.date)} ${x.period} · ${x.weather||"날씨 미제공"} · 예상파고 ${isMissing(x.waveMin)?"미제공":x.waveMin}~${isMissing(x.waveMax)?"미제공":x.waveMax}m`});
+  const table=tableFor(rows,["날짜","구분","날씨","최저 예상파고(m)","최고 예상파고(m)"],x=>[esc(dateLabel(x.date)),esc(x.period),wxCell(x.weather),showValue(x.waveMin,"m"),showValue(x.waveMax,"m")]);
+  $("results").innerHTML=metaPanel(r)+
+  `<section class="panel reveal"><div class="panel-head"><div><p class="step">날짜별 예보</p><h2>날씨와 예상파고</h2></div>
+    <div class="legend"><span><i class="wlow"></i>1.5m 미만</span><span><i class="wmid"></i>1.5~3m 미만</span><span><i class="whigh"></i>3m 이상</span><span>(이 앱의 표시 구분 · 공식 특보 기준 아님)</span></div></div>
+    ${rows.length?timeline(rows,cell):'<p class="missing">예보 데이터가 없습니다.</p>'}</section>
+  <section class="panel reveal">${tabs("sea-view",[{label:"파고 범위 그래프",html:chart},{label:"수치표",html:table}])}</section>`+rawDetails(r);
 }
-function tableFor(rows,heads,values){return `<div class="table-scroll"><table><thead><tr>${heads.map(h=>`<th scope="col">${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${values(r).map(v=>`<td>${isMissing(v)?'<span class="missing">미제공</span>':v}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;}
+
+// ---- 효과 보조 함수 ----
+function countUp(el){
+  const raw=el.dataset.count, target=Number(raw); if(!Number.isFinite(target)) return;
+  const dec=(raw.split(".")[1]||"").length, start=performance.now(), dur=650;
+  const step=(now)=>{const t=Math.min(1,(now-start)/dur), e=1-Math.pow(1-t,3); el.textContent=(target*e).toFixed(dec); if(t<1) requestAnimationFrame(step); else el.textContent=raw;};
+  requestAnimationFrame(step);
+}
+let revealObserver=null;
+function observeReveals(root,animate){
+  const items=root.querySelectorAll(".reveal");
+  if(!animate || REDUCED || !("IntersectionObserver" in window)){ items.forEach(n=>n.classList.add("in")); return; }
+  revealObserver?.disconnect();
+  revealObserver=new IntersectionObserver(entries=>entries.forEach(en=>{if(en.isIntersecting){en.target.classList.add("in");revealObserver.unobserve(en.target);}}),{threshold:0});
+  items.forEach(n=>revealObserver.observe(n));
+  // 안전장치: 관찰이 늦어도 내용이 숨겨진 채 남지 않게 한다.
+  clearTimeout(state.revealTimer); state.revealTimer=setTimeout(()=>root.querySelectorAll(".reveal:not(.in)").forEach(n=>n.classList.add("in")),1200);
+}
+function flashNewBadge(){const b=$("new-badge"); if(!b) return; b.classList.remove("hidden"); clearTimeout(state.badgeTimer); state.badgeTimer=setTimeout(()=>b.classList.add("hidden"),8000);}
+function setupInteractions(){
+  document.addEventListener("click",e=>{const t=e.target.closest('.tabs [role="tab"]'); if(t) selectTab(t);});
+  document.addEventListener("keydown",e=>{const t=e.target.closest?.('.tabs [role="tab"]'); if(!t||!["ArrowLeft","ArrowRight"].includes(e.key)) return;
+    const all=[...t.parentElement.querySelectorAll('[role="tab"]')]; const n=all[(all.indexOf(t)+(e.key==="ArrowRight"?1:all.length-1))%all.length]; n.focus(); selectTab(n);});
+  // 그래프 값 확인: 날짜 열에 마우스를 올리거나 터치하면 안내선과 말풍선을 보여 준다.
+  const showTip=(e)=>{const hit=e.target.closest?.(".hit"); if(!hit) return; const wrap=hit.closest(".chart-wrap"), tip=wrap.querySelector(".tip");
+    const wr=wrap.getBoundingClientRect(), hr=hit.getBoundingClientRect(); tip.textContent=hit.dataset.tip; tip.hidden=false;
+    const left=hr.left-wr.left+wrap.scrollLeft+hr.width/2; tip.style.left=`${Math.max(70+wrap.scrollLeft,Math.min(left,wrap.scrollLeft+wr.width-70))}px`; tip.style.top=`${Math.max(4,e.clientY-wr.top-54)}px`;};
+  document.addEventListener("pointermove",showTip); document.addEventListener("pointerdown",showTip);
+  document.addEventListener("pointerout",e=>{const hit=e.target.closest?.(".hit"); if(hit && !hit.contains(e.relatedTarget)){const tip=hit.closest(".chart-wrap").querySelector(".tip"); tip.hidden=true;}});
+  // 스크롤하면 상단 메뉴만 반투명 유리 효과로 바뀐다.
+  const header=document.querySelector(".site-header"); const onScroll=()=>header.classList.toggle("scrolled",window.scrollY>8);
+  window.addEventListener("scroll",onScroll,{passive:true}); onScroll();
+}
 
 const CHAT_STORE="kma-chat-v1", CHAT_PENDING="kma-chat-pending-v1";
 let chatComposing=false;
