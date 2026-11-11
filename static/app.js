@@ -41,7 +41,11 @@ async function initialize(){
   try{
     const [status,regions]=await Promise.all([getJSON("/api/status"),getJSON("/api/regions")]);
     state.status=status; state.regions=regions[page];
-    fillRegions(); fillReleases(status.releaseCandidates); updateKeyAlert(status); updateUsage(status.usage,status.warning); updateAdminAlert(status);
+    fillRegions(); fillReleases(status.releaseCandidates);
+    // 화면용 드롭다운: 지역은 검색 가능(기온은 203곳), 발표시각은 단순 목록
+    enhanceSelect($("region"),{label:"region-label",searchable:state.regions.length>12,placeholder:"지역 이름 또는 코드 검색"});
+    enhanceSelect($("release"),{label:"release-label"});
+    updateKeyAlert(status); updateUsage(status.usage,status.warning); updateAdminAlert(status);
     $("region").addEventListener("change",()=>{saveRegion($("region").value); updateRegionDetail(); state.lastGood=null; clearStatus(); $("results").classList.add("is-switching"); resetRelease(); refresh(true);});
     $("release").addEventListener("change",()=>{state.releaseChosenByUser=true; state.lastGood=null; clearStatus(); $("results").classList.add("is-switching"); refresh(true);});
     $("refresh").addEventListener("click",()=>refresh(true));

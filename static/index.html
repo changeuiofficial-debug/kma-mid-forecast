@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="기상청 중기예보 네 기능을 지역별로 조회하고 그래프와 표로 확인합니다.">
   <title>기상청 중기예보</title>
-  <link rel="stylesheet" href="/styles.css?v=28">
+  <link rel="stylesheet" href="/styles.css?v=29">
 </head>
 <body>
   <a class="skip" href="#main">본문으로 건너뛰기</a>
@@ -37,8 +37,8 @@
         <button id="refresh" class="primary" type="button"><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>지금 확인</button>
       </div>
       <div class="controls">
-        <label>지역 선택<select id="region"></select></label>
-        <label>발표시각<select id="release"></select></label>
+        <div class="field"><span class="field-label" id="region-label">지역 선택</span><select id="region" aria-labelledby="region-label"></select></div>
+        <div class="field"><span class="field-label" id="release-label">발표시각</span><select id="release" aria-labelledby="release-label"></select></div>
       </div>
       <div id="region-detail" class="region-detail"></div>
     </section>
@@ -84,6 +84,7 @@
     </form>
   </aside>
   <footer>출처: 기상청 중기예보 조회서비스 · 공공데이터포털</footer>
-  <script src="/app.js?v=28" defer></script>
+  <script src="/combo.js?v=30" defer></script>
+  <script src="/app.js?v=29" defer></script>
 </body>
 </html>
