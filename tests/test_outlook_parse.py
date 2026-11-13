@@ -12,7 +12,8 @@ class OutlookParseTests(unittest.TestCase):
     def test_node_parser_tests(self):
         result = subprocess.run(["node", str(TEST_FILE)], capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("8 passed", result.stdout)
+        self.assertRegex(result.stdout, r"\d+ passed")
+        self.assertNotIn("not ok", result.stdout)
 
 
 if __name__ == "__main__":

@@ -50,7 +50,7 @@ if errorlevel 1 echo [선택] AI 예보 도우미를 쓰려면 KEY.env에 GEMINI
 :start
 echo.
 echo 서버를 시작하는 중입니다. 아래에 [준비 완료]가 표시된 뒤 접속하세요.
-echo 기본 주소: http://127.0.0.1:8080/outlook
+echo 기본 주소: http://127.0.0.1:8080/now
 echo 이 창을 닫으면 서버가 꺼집니다. 종료하려면 Ctrl+C를 누르세요.
 echo.
 %PY_CMD% server.py

@@ -1,14 +1,29 @@
 "use strict";
 
 // 브라우저는 이 로컬 서버(/api/...)에만 요청한다. 인증키는 서버에만 있다.
-const PAGE_BY_PATH = {"/":"outlook","/outlook":"outlook","/land":"land","/temperature":"temperature","/sea":"sea"};
+const PAGE_BY_PATH = {"/":"now","/now":"now","/ultra":"ultra","/short":"short","/outlook":"outlook","/land":"land","/temperature":"temperature","/sea":"sea"};
+const SHORT_METHOD = (cycle, cacheText) => [
+  `${cycle} 30초마다 새 자료가 생기는 것이 아니라, 활성 탭에서 30초마다 서버에 확인합니다. 같은 발표본은 서버 캐시(${cacheText})를 그대로 쓰고, 숨긴 탭에서는 자동 확인을 멈춥니다.`,
+  "브라우저는 이 로컬 서버에만 요청합니다. 서버가 기상청 API 호출, 같은 조건의 캐시 공유, 중기·단기 합산 호출량을 관리합니다. 단기 기능 사이의 외부 호출은 최소 5초 간격(중기 기능은 30초)입니다.",
+  "호출량은 최근 24시간 이동 집계입니다(공공데이터포털의 일일 초기화 시각은 공식 자료에서 확인하지 못했습니다). 8,000회부터 경고하고 9,000회에서 외부 호출을 멈춥니다. 같은 인증키를 다른 프로그램에서도 쓰면 포털 집계와 다를 수 있습니다.",
+  "지역은 기상청 격자(X,Y) 좌표로 조회합니다. 같은 격자를 쓰는 행정구역은 같은 값을 받으며, 행정동 단위의 정밀 예보가 아닙니다."];
 const CONFIG = {
+  now:{name:"getUltraSrtNcst",title:"현재 날씨",grid:true,codeName:"격자 X,Y",note:["매시 정시 발표","10분마다 갱신 · KST"],
+    cycle:"실황은 매시 정시에 생성되어 10분마다 갱신되며, 발표 10분 이후부터 조회할 수 있습니다.",
+    description:"선택한 지역이 속한 격자의 대표 관측소(AWS) 실황을 확인합니다. 예보가 아니라 관측값입니다.",method:SHORT_METHOD("실황은 매시 정시에 생성되어 10분마다 갱신됩니다.","10분")},
+  ultra:{name:"getUltraSrtFcst",title:"6시간 예보",grid:true,codeName:"격자 X,Y",note:["매시 30분 발표","앞으로 6시간 · KST"],
+    cycle:"초단기예보는 매시 30분에 생성되는 앞으로 6시간 예보이며, 발표 45분 이후부터 조회할 수 있습니다.",
+    description:"앞으로 6시간의 시간별 기온·하늘상태·강수확률·습도·바람을 카드, 그래프, 표로 확인합니다.",method:SHORT_METHOD("초단기예보는 매시 30분에 새로 발표됩니다.","10분")},
+  short:{name:"getVilageFcst",title:"단기예보",grid:true,codeName:"격자 X,Y",note:["하루 8회 발표","02·05·08·11·14·17·20·23시"],
+    cycle:"단기예보는 02·05·08·11·14·17·20·23시(하루 8회)에 발표되며, 발표 10분 이후부터 조회할 수 있습니다.",
+    description:"며칠 앞까지의 시간별 기온·강수확률·하늘상태와 날짜별 최저·최고기온을 확인합니다.",method:SHORT_METHOD("단기예보는 하루 8번 발표됩니다.","30분")},
   outlook:{name:"getMidFcst",title:"중기전망",codeName:"지점번호 stnId",description:"권역별 서술형 기상전망(wfSv) 원문과 조회에 사용한 발표 정보를 확인합니다. 전망문은 수치 그래프로 바꾸지 않습니다."},
   land:{name:"getMidLandFcst",title:"중기육상예보",codeName:"육상 예보구역코드 regId",description:"날짜별 날씨와 강수확률(%)을 카드, 그래프, 표로 확인합니다. 4~7일 후는 오전·오후, 8~10일 후는 하루 단위입니다."},
   temperature:{name:"getMidTa",title:"중기기온",codeName:"기온 예보구역코드 regId",description:"첨부 Excel의 상세 기온 지점별 예상 최저·최고기온(℃)을 두 개의 선과 수치표로 비교합니다."},
   sea:{name:"getMidSeaFcst",title:"중기해상예보",codeName:"해상 예보구역코드 regId",description:"해역별 날씨와 최저·최고 예상파고(m) 범위를 확인합니다. 육상 지역과 자동으로 연결하지 않습니다."}
 };
-const page = PAGE_BY_PATH[location.pathname] || "outlook";
+const page = PAGE_BY_PATH[location.pathname] || "now";
+const IS_GRID = Boolean(CONFIG[page].grid);
 const REFRESH_SECONDS = 30;
 const $ = (id) => document.getElementById(id);
 const state = {regions:[], seconds:REFRESH_SECONDS, timer:null, status:null, busy:false, chatBusy:false,
@@ -25,7 +40,7 @@ function kst(date){const o={};KST_PARTS.formatToParts(date).forEach(p=>{o[p.type
 const fmtDate=(iso)=>`${Number(iso.slice(5,7))}/${Number(iso.slice(8,10))}(${KST_WEEKDAY.format(new Date(`${iso}T12:00:00+09:00`))})`;
 const dateLabel=fmtDate, md=fmtDate;
 const tmFcDate=(v)=>new Date(`${v.slice(0,4)}-${v.slice(4,6)}-${v.slice(6,8)}T${v.slice(8,10)}:${v.slice(10,12)}:00+09:00`);
-const fmtRelease=(v)=>`${fmtDate(`${v.slice(0,4)}-${v.slice(4,6)}-${v.slice(6,8)}`)} ${v.slice(8,10)}시`;
+const fmtRelease=(v)=>`${fmtDate(`${v.slice(0,4)}-${v.slice(4,6)}-${v.slice(6,8)}`)} ${v.slice(10,12)==='00'?`${v.slice(8,10)}시`:`${v.slice(8,10)}:${v.slice(10,12)}`}`;
 const releaseLabel=(v)=>`${fmtRelease(v)} 발표`;
 function ageText(v){const min=Math.max(0,Math.round((Date.now()-tmFcDate(v).getTime())/60000)); return min<60?`${min}분 전`:`${Math.floor(min/60)}시간 전`;}
 function fmtClock(sec){
@@ -45,8 +60,10 @@ async function getJSON(url){
 }
 
 function setupPage(){
-  const cfg=CONFIG[page]; document.title=`${cfg.title} | 기상청 중기예보`;
+  const cfg=CONFIG[page]; document.title=`${cfg.title} | 기상청 예보`;
   $("feature-name").textContent=cfg.name; $("page-title").textContent=cfg.title; $("page-description").textContent=cfg.description;
+  if(cfg.note){ $("rel-note-title").textContent=cfg.note[0]; $("rel-note-sub").textContent=cfg.note[1]; }
+  if(cfg.method) $("method-note").innerHTML=`<h2>데이터 안내</h2>${cfg.method.map(t=>`<p>${esc(t)}</p>`).join("")}`;
   document.querySelectorAll("nav a").forEach(a=>{if(a.dataset.page===page){a.classList.add("active");a.setAttribute("aria-current","page");}});
 }
 
@@ -54,10 +71,10 @@ async function initialize(){
   setupPage(); setupInteractions();
   try{
     const [status,regions]=await Promise.all([getJSON("/api/status"),getJSON("/api/regions")]);
-    state.status=status; state.regions=regions[page];
-    fillRegions(); fillReleases(status.releaseCandidates);
+    state.status=status; state.regions=regions[IS_GRID?"grid":page];
+    fillRegions(); fillReleases(status.releases?.[page]||status.releaseCandidates);
     // 화면용 드롭다운: 지역은 검색 가능(기온은 203곳), 발표시각은 단순 목록
-    enhanceSelect($("region"),{label:"region-label",searchable:state.regions.length>12,placeholder:"지역 이름 또는 코드 검색"});
+    enhanceSelect($("region"),{label:"region-label",searchable:state.regions.length>12,placeholder:IS_GRID?"지역 이름 검색 (예: 종로구, 해운대)":"지역 이름 또는 코드 검색"});
     enhanceSelect($("release"),{label:"release-label"});
     updateKeyAlert(status); updateUsage(status.usage,status.warning); updateAdminAlert(status);
     $("region").addEventListener("change",()=>{saveRegion($("region").value); updateRegionDetail(); state.lastGood=null; clearStatus(); $("results").classList.add("is-switching"); resetRelease(); refresh(true);});
@@ -73,19 +90,29 @@ async function initialize(){
   }catch(error){ showMessage(error.message,"error"); $("status-countdown").textContent="중지됨"; }
 }
 
-function saveRegion(code){ try{ localStorage.setItem(`kma-region-${page}`,code); }catch(_){} }
-function loadRegion(){ try{ return localStorage.getItem(`kma-region-${page}`); }catch(_){ return null; } }
+const REGION_KEY=`kma-region-${IS_GRID?"grid":page}`;  // 현재·6시간·단기 페이지는 같은 지역 선택을 공유한다
+function saveRegion(code){ try{ localStorage.setItem(REGION_KEY,code); }catch(_){} }
+function loadRegion(){ try{ return localStorage.getItem(REGION_KEY); }catch(_){ return null; } }
 function fillRegions(){
   const saved=loadRegion();
-  $("region").innerHTML=state.regions.map(r=>`<option value="${esc(r.code)}">${esc(r.name)} (${esc(r.code)})</option>`).join("");
+  $("region").innerHTML=state.regions.map(r=>`<option value="${esc(r.code)}">${esc(r.name)} (${IS_GRID?`${esc(r.nx)},${esc(r.ny)}`:esc(r.code)})</option>`).join("");
   if(state.regions.some(r=>r.code===saved)) $("region").value=saved;
 }
 function fillReleases(values){
-  $("release").innerHTML=values.map((v,i)=>`<option value="${v}">${releaseLabel(v)} (${i===0?"최신 · ":""}${v.slice(8,10)==="06"?"4~10일 후":"5~10일 후"})</option>`).join("");
+  $("release").innerHTML=values.map((v,i)=>IS_GRID
+    ?`<option value="${v}">${releaseLabel(v)} (${i===0?"최신":"직전 발표"})</option>`
+    :`<option value="${v}">${releaseLabel(v)} (${i===0?"최신 · ":""}${v.slice(8,10)==="06"?"4~10일 후":"5~10일 후"})</option>`).join("");
+}
+// 시간이 지나 새 발표본이 생기면(단기 기능은 매시) 사용자가 직접 고르지 않은 경우 자동으로 최신 발표본으로 옮긴다.
+function syncReleases(s){
+  const list=s.releases?.[page]; const sel=$("release");
+  if(!list||state.releaseChosenByUser||sel.options[0]?.value===list[0]) return false;
+  fillReleases(list); sel.selectedIndex=0; sel._combo?.sync(); state.fallbackFrom=null; return true;
 }
 function resetRelease(){ if(!state.releaseChosenByUser) $("release").selectedIndex=0; state.fallbackFrom=null; }
 function updateRegionDetail(){
   const r=state.regions.find(x=>x.code===$("region").value); if(!r) return;
+  if(IS_GRID){ $("region-detail").innerHTML=`<strong>${esc(r.name)}</strong> · 격자 <span class="code">X ${esc(r.nx)}</span> <span class="code">Y ${esc(r.ny)}</span> · 같은 격자를 쓰는 지역 ${esc(r.n)}곳은 같은 값을 받습니다(행정동 단위 정밀 예보가 아님)`; return; }
   $("region-detail").innerHTML=`<strong>${esc(r.name)}</strong> · ${esc(CONFIG[page].codeName)} <span class="code">${esc(r.code)}</span> · 적용 범위: ${esc(r.scope)}`;
 }
 function updateKeyAlert(s){
@@ -99,7 +126,7 @@ function updateKeyAlert(s){
 }
 function renderKeyNeeded(s){
   state.renderedKey=null; $("results").innerHTML=`<section class="panel"><h2>아직 조회할 수 없습니다</h2><p>서버에 인증키가 없어서 기상청 API를 호출하지 않았습니다. 지역·발표시각 선택과 화면 구조는 그대로 사용할 수 있습니다.</p>
-  <ol class="steps"><li>공공데이터포털에서 ‘기상청_중기예보 조회서비스’ 활용신청 후 일반 인증키를 발급받습니다.</li>
+  <ol class="steps"><li>공공데이터포털에서 ‘기상청_중기예보 조회서비스’·‘기상청_단기예보 조회서비스’ 활용신청 후 일반 인증키를 발급받습니다.</li>
   <li>${esc(s.keyFile||"KEY.env")} 파일에 <span class="code">KMA_SERVICE_KEY=발급받은_실제_인증키</span>를 저장합니다.</li>
   <li>서버 창에서 Ctrl+C로 종료한 뒤 서버실행.cmd를 다시 실행합니다.</li></ol></section>`;
 }
@@ -143,10 +170,11 @@ async function refresh(manual){
       state.renderedKey=viewKey; state.renderedSig=sig;
     }else{ document.querySelectorAll(".stale-badge").forEach(n=>n.remove()); }
     updateMeta(result,meta); hideMessage();
-    const hasData=page==="outlook"?Boolean(result.data?.text):Array.isArray(result.data)&&result.data.length>0;
+    const d=result.data;
+    const hasData=page==="outlook"?Boolean(d?.text):page==="now"?Boolean(d&&Object.values(d).some(v=>v!==null&&v!==undefined)):Array.isArray(d)&&d.length>0;
     if(!hasData && tryOlderRelease("최신 발표 후보에 예보 값이 없어", meta.retryAfter)) return;
     if(meta.cache.startsWith("stale")){
-      const why={stale_cooldown:"다른 조회와의 30초 호출 간격을 지키는 중이라",stale_backoff:"이전 오류로 재시도 간격을 늘리는 중이라",
+      const why={stale_cooldown:`다른 조회와의 ${IS_GRID?5:30}초 호출 간격을 지키는 중이라`,stale_backoff:"이전 오류로 재시도 간격을 늘리는 중이라",
         stale_error:"이번 갱신이 실패해",stale_limit:"외부 호출이 중지된 상태라",stale_inflight:"동일 요청이 끝나지 않아"}[meta.cache]||"";
       showMessage(`${why} 서버에 저장된 이전 정상 자료를 표시합니다. 기상청 마지막 성공 조회: ${timeLabel(meta.fetchedAt)}${meta.retryAfter?` · 약 ${meta.retryAfter}초 후 다시 확인`:""}`, meta.cache==="stale_cooldown"?"info":"warning");
     }
@@ -157,7 +185,7 @@ async function refresh(manual){
     if(WAIT_CODES.has(code)){
       const sec=Number(error.info.retryAfter)||REFRESH_SECONDS;
       showMessage(`${error.message} 약 ${sec}초 후 자동으로 다시 확인합니다.`,"info");
-      if(!state.lastGood){ state.renderedKey=null; $("results").innerHTML=`<section class="panel loading"><h2>조회 대기 중</h2><p>이 앱은 네 기능을 합쳐 기상청 API를 30초에 한 번만 호출합니다. 순서가 되면 자동으로 표시됩니다.</p></section>`; }
+      if(!state.lastGood){ state.renderedKey=null; $("results").innerHTML=`<section class="panel loading"><h2>조회 대기 중</h2><p>${IS_GRID?"이 앱은 같은 서비스의 기상청 API 호출 사이에 최소 5초 간격을 둡니다.":"이 앱은 네 기능을 합쳐 기상청 API를 30초에 한 번만 호출합니다."} 순서가 되면 자동으로 표시됩니다.</p></section>`; }
       schedule(sec,3); return;
     }
     const prefix={provider_auth:"[인증·활용신청 오류] ",provider_limit:"[제공기관 호출 제한] ",provider_limit_halt:"[외부 호출 중지] ",app_limit:"[앱 호출 상한] ",
@@ -168,7 +196,7 @@ async function refresh(manual){
     schedule(error.info?.retryAfter);
   }finally{
     state.busy=false; $("refresh").disabled=false; $("refresh").classList.remove("loading"); $("results").classList.remove("is-switching");
-    getJSON("/api/status").then(s=>{state.status=s; updateUsage(s.usage,s.warning); updateAdminAlert(s);}).catch(()=>{});
+    getJSON("/api/status").then(s=>{state.status=s; updateUsage(s.usage,s.warning); updateAdminAlert(s); if(syncReleases(s)) state.seconds=Math.min(state.seconds,2);}).catch(()=>{});
   }
 }
 function tryOlderRelease(reason, retryAfter){
@@ -176,7 +204,7 @@ function tryOlderRelease(reason, retryAfter){
   if(state.releaseChosenByUser || sel.selectedIndex!==0 || sel.options.length<2) return false;
   state.fallbackFrom=sel.value; sel.selectedIndex=1; state.lastGood=null;
   const sec=Math.max(REFRESH_SECONDS,Number(retryAfter)||REFRESH_SECONDS); schedule(sec);
-  showMessage(`${reason} 최근 24시간 이내의 이전 발표본(${releaseLabel(sel.value)})을 약 ${sec}초 후 확인합니다.`,"info");
+  showMessage(`${reason} ${IS_GRID?"직전":"최근 24시간 이내의 이전"} 발표본(${releaseLabel(sel.value)})을 약 ${sec}초 후 확인합니다.`,"info");
   return true;
 }
 function markStale(){ const head=document.querySelector("#results .panel"); if(head && !head.querySelector(".stale-badge")) head.insertAdjacentHTML("afterbegin",'<span class="badge stale-badge">이전 자료</span>'); }
@@ -212,8 +240,8 @@ function precip(type){
   if(type==="snow") return flake(17,37)+flake(25,41)+flake(33,37);
   return drop(18)+flake(26,39)+drop(34); // 비/눈
 }
-function wxIcon(text,size=""){
-  const k=wxKind(text); if(!k) return "";
+function wxIcon(text,size=""){ const k=wxKind(text); return k?wxSvg(k,size):""; }
+function wxSvg(k,size=""){
   const up=k.pcp?' transform="translate(0 -5)"':"";
   let g=k.sky==="clear"?sun(24,24,8):(k.sky==="partly"?`<g${up}>${sun(31,15,6)}</g>`:"")+`<path class="${k.sky==="overcast"?"cloud dark":"cloud"}" d="${CLOUD}"${up}/>`;
   if(k.pcp) g+=precip(k.pcp);
@@ -246,6 +274,7 @@ function stat(i,icon,label,value,unit,sub){
   return `<div class="stat" style="--i:${i}"><span class="stat-ic">${icon}</span><span class="stat-label">${esc(label)}</span><strong>${body}</strong><span class="stat-sub">${esc(sub||"")}</span></div>`;
 }
 function summaryFor(result){
+  if(IS_GRID) return shortSummary(result);
   const rows=Array.isArray(result.data)?result.data:[];
   if(!rows.length) return "";
   const precipCount=rows.filter(r=>HAS_PRECIP.test(r.weather||"")).length;
@@ -273,20 +302,20 @@ function summaryFor(result){
 
 function metaPanel(result){
   const selected=state.regions.find(r=>r.code===result.requestedCode);
-  const compare={match:"요청·응답 코드 일치",mismatch:"요청·응답 코드 불일치",not_returned:"응답에 코드 없음 · 비교 불가"}[result.codeComparison];
+  const compare=(IS_GRID?{match:"요청·응답 격자 일치",mismatch:"요청·응답 격자 불일치",not_returned:"응답에 격자 없음 · 비교 불가"}:{match:"요청·응답 코드 일치",mismatch:"요청·응답 코드 불일치",not_returned:"응답에 코드 없음 · 비교 불가"})[result.codeComparison];
   const rows=Array.isArray(result.data)?result.data:[];
   const dates=[...new Set(rows.map(r=>r.date))];
   const rel=result.requestedRelease;
-  const chips=[];
-  if(dates.length) chips.push(`${ui("calendar")}예보 ${md(dates[0])} ~ ${md(dates[dates.length-1])} · ${dates.length}일`);
+  const chips=IS_GRID?shortChips(result):[];
+  if(!IS_GRID&&dates.length) chips.push(`${ui("calendar")}예보 ${md(dates[0])} ~ ${md(dates[dates.length-1])} · ${dates.length}일`);
   chips.push(`<span class="${result.codeComparison==="mismatch"?"bad":""}">${esc(compare)}</span>`);
-  const facts=`<li>요청에 사용한 발표시각 <b>${esc(releaseLabel(rel))}</b> (tmFc <span class="code">${esc(rel)}</span>) — 응답에는 발표시각 필드가 없어 요청값을 따로 보관한 것입니다.</li>
+  const facts=IS_GRID?shortFacts(result,selected):`<li>요청에 사용한 발표시각 <b>${esc(releaseLabel(rel))}</b> (tmFc <span class="code">${esc(rel)}</span>) — 응답에는 발표시각 필드가 없어 요청값을 따로 보관한 것입니다.</li>
     ${Array.isArray(result.data)?`<li>가이드 기준 06시 발표는 4~10일 후, 18시 발표는 5~10일 후 예보입니다.</li>
     <li>API totalCount <b>${esc(result.totalCount)}</b>건 → 한 항목 안의 날짜별 필드를 펼쳐 <b>${rows.length}</b>개 행으로 표시합니다. 두 수는 다를 수 있습니다.</li>`:""}
     <li>제공기관 결과코드 ${esc(result.providerResult?.code||"—")} ${esc(result.providerResult?.message||"")}</li>
     <li>${esc(CONFIG[page].codeName)} <span class="code">${esc(result.requestedCode)}</span> · 적용 범위: ${esc(selected?.scope||"")}</li>`;
   return `<section class="panel result-head">
-    <div class="result-title"><div><p class="step">조회 결과</p><h2>${esc(selected?.name||result.requestedCode)} <span class="code">${esc(result.requestedCode)}</span></h2></div>
+    <div class="result-title"><div><p class="step">조회 결과</p><h2>${esc(selected?.name||result.requestedCode)} <span class="code">${IS_GRID&&selected?`${esc(selected.nx)},${esc(selected.ny)}`:esc(result.requestedCode)}</span></h2></div>
     <span id="new-badge" class="badge new hidden" role="status">새 예보 반영</span></div>
     <div class="chips">${chips.map(c=>`<span class="chip">${c}</span>`).join("")}</div>
     ${summaryFor(result)}
@@ -360,8 +389,9 @@ const wxCell=(text)=>`<span class="wx-cell">${wxIcon(text,"sm")}${showValue(text
 
 // ---- 페이지별 렌더 ----
 function render(result,opts={}){
+  if(IS_GRID) renderShortPage(result);
+  else if(page==="outlook")renderOutlook(result);else if(page==="land")renderLand(result);else if(page==="temperature")renderTemperature(result);else renderSea(result);
   const el=$("results");
-  if(page==="outlook")renderOutlook(result);else if(page==="land")renderLand(result);else if(page==="temperature")renderTemperature(result);else renderSea(result);
   el.classList.remove("is-switching");
   if(opts.animate && !REDUCED){ el.classList.remove("enter"); void el.offsetWidth; el.classList.add("enter"); clearTimeout(state.enterTimer); state.enterTimer=setTimeout(()=>el.classList.remove("enter"),1800); el.querySelectorAll("[data-count]").forEach(countUp); }
   observeReveals(el, opts.animate);

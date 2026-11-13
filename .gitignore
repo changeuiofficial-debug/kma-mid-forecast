@@ -4,6 +4,12 @@ KEY.env.txt
 .env
 .env.*
 *.env.local
+# 이름을 잘못 지은 키 파일(.evn 등)도 올라가지 않게 막는다
+.evn
+.evn.*
+*.evn
+KEY.*
+!KEY.env.example
 # 실행 중 생성되는 캐시·호출 기록
 runtime/
 __pycache__/

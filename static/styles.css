@@ -223,3 +223,36 @@ body.combo-lock{overflow:hidden}
   .sum-body{grid-column:1/-1;padding-top:0}
   .sum-temp{grid-template-columns:1fr;row-gap:0;margin-top:.35rem}.sum-temp:first-child{margin-top:0}
 }
+
+/* 33: 단기 기능(현재 날씨·6시간·단기예보) */
+nav{align-items:center}
+.nav-group{font-size:.7rem;font-weight:800;color:var(--muted);letter-spacing:.06em;padding:0 .3rem 0 .4rem;white-space:nowrap}
+.nav-sep{width:1px;height:20px;background:var(--line);margin:0 .5rem;flex:none}
+.wx.xl{width:84px;height:84px}
+.gap{height:.7rem}
+.now-hero{display:grid;gap:1.3rem}
+.now-main{display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap}
+.now-ic{flex:none}
+.now-noicon{width:84px;height:84px;display:grid;place-items:center;border-radius:22px;background:#fff1e6;color:#c4621d}.now-noicon .ui-ic{width:44px;height:44px}
+.now-temp{font-size:clamp(3rem,9vw,4.8rem);font-weight:800;letter-spacing:-.04em;line-height:1.05;font-variant-numeric:tabular-nums}
+.now-temp small{font-size:.38em;font-weight:700;color:var(--muted);margin-left:.1em}
+.now-pty{margin:.2rem 0 0;color:var(--muted);font-weight:700}
+.now-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.7rem}
+.now-tile{border:1px solid var(--line);border-radius:14px;padding:1rem 1.1rem;background:linear-gradient(180deg,#fff,#f7fafb)}
+.now-tile .lab{display:block;font-size:.78rem;color:var(--muted);font-weight:700;margin-bottom:.2rem}
+.now-tile strong{display:flex;align-items:center;gap:.4rem;font-size:1.75rem;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.now-tile small.u{font-size:.85rem;color:var(--muted);font-weight:700}
+.now-tile>small{display:block;color:var(--muted);font-size:.82rem;margin-top:.1rem}
+.wind-arrow{width:28px;height:28px;fill:none;stroke:var(--blue);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.big-temp{font-size:1.9rem;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1.2}
+.big-temp small{font-size:.9rem;color:var(--muted);font-weight:700}
+.mini{list-style:none;margin:.45rem 0 0;padding:0;font-size:.82rem;color:var(--muted)}.mini li{margin:.12rem 0}
+.range-line{display:flex;flex-wrap:wrap;gap:.2rem .8rem;font-weight:800;font-variant-numeric:tabular-nums;margin:.1rem 0 .3rem}
+.range-line .am{color:#12607f}.range-line .dy{color:#c4621d}
+.table-tall{max-height:540px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.table-tall .table-scroll{border:0;overflow:visible}
+.table-tall thead th{position:sticky;top:0;z-index:1}
+.tline{fill:none;stroke:var(--blue);stroke-width:2.6;stroke-linejoin:round;stroke-linecap:round}
+.tdot{fill:#fff;stroke:var(--blue);stroke-width:2.2}.tdot.small{fill:var(--blue);stroke:none}
+.day-line{stroke:#c9d3da;stroke-width:1;stroke-dasharray:2 4}
+@media(max-width:760px){.nav-group{display:none}.now-main{gap:1rem}.wx.xl{width:68px;height:68px}.now-noicon{width:68px;height:68px}}
