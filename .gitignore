@@ -16,3 +16,7 @@ __pycache__/
 *.py[cod]
 *.zip
 .DS_Store
+
+# 스냅샷 데모 생성물
+snapshot-data/
+snapshot-site/

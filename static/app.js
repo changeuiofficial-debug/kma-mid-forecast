@@ -130,7 +130,16 @@ function renderKeyNeeded(s){
   <li>${esc(s.keyFile||"KEY.env")} 파일에 <span class="code">KMA_SERVICE_KEY=발급받은_실제_인증키</span>를 저장합니다.</li>
   <li>서버 창에서 Ctrl+C로 종료한 뒤 서버실행.cmd를 다시 실행합니다.</li></ol></section>`;
 }
-function updateUsage(value,warning){$("status-usage").textContent=`${Number(value).toLocaleString()} / 9,000`; $("status-usage").classList.toggle("warn",Boolean(warning));}
+let usageShown=false;   // 사이드바 호출량은 처음 한 번만 올라가는 효과를 넣고, 30초 갱신 때는 값만 바꾼다.
+function updateUsage(value,warning){
+  const el=$("status-usage"), n=Number(value), fmt=(v)=>`${Math.round(v).toLocaleString()} / 9,000`;
+  el.classList.toggle("warn",Boolean(warning));
+  if(!usageShown && Number.isFinite(n) && n>0 && !REDUCED){
+    usageShown=true; el.textContent=fmt(n); const start=performance.now(), dur=800;
+    const step=(now)=>{const t=Math.min(1,(now-start)/dur); if(t<1){el.textContent=fmt(n*(1-Math.pow(1-t,3))); requestAnimationFrame(step);} else el.textContent=fmt(n);};
+    requestAnimationFrame(step);
+  } else el.textContent=fmt(n);
+}
 function updateAdminAlert(s){
   const el=$("admin-alert"); let html="";
   if(s.providerHaltUntil) html=`<strong>외부 호출 중지</strong> 제공기관이 호출 제한 오류를 반환해 ${esc(timeLabel(s.providerHaltUntil))}까지 기상청 API를 호출하지 않습니다. 캐시 자료만 표시합니다.`;
@@ -488,9 +497,10 @@ function renderSea(r){
 
 // ---- 효과 보조 함수 ----
 function countUp(el){
-  const raw=el.dataset.count, target=Number(raw); if(!Number.isFinite(target)) return;
-  const dec=(raw.split(".")[1]||"").length, start=performance.now(), dur=650;
-  const step=(now)=>{const t=Math.min(1,(now-start)/dur), e=1-Math.pow(1-t,3); el.textContent=(target*e).toFixed(dec); if(t<1) requestAnimationFrame(step); else el.textContent=raw;};
+  const raw=el.dataset.count, parts=raw.split("~"), nums=parts.map(Number);   // "15~18" 같은 범위는 양쪽 숫자를 함께 센다.
+  if(!nums.every(Number.isFinite)) return;
+  const decs=parts.map(x=>(x.split(".")[1]||"").length), start=performance.now(), dur=650;
+  const step=(now)=>{const t=Math.min(1,(now-start)/dur), e=1-Math.pow(1-t,3); el.textContent=t<1?nums.map((n,i)=>(n*e).toFixed(decs[i])).join("~"):raw; if(t<1) requestAnimationFrame(step);};
   requestAnimationFrame(step);
 }
 let revealObserver=null;
@@ -514,9 +524,9 @@ function setupInteractions(){
     const left=hr.left-wr.left+wrap.scrollLeft+hr.width/2; tip.style.left=`${Math.max(70+wrap.scrollLeft,Math.min(left,wrap.scrollLeft+wr.width-70))}px`; tip.style.top=`${Math.max(4,e.clientY-wr.top-54)}px`;};
   document.addEventListener("pointermove",showTip); document.addEventListener("pointerdown",showTip);
   document.addEventListener("pointerout",e=>{const hit=e.target.closest?.(".hit"); if(hit && !hit.contains(e.relatedTarget)){const tip=hit.closest(".chart-wrap").querySelector(".tip"); tip.hidden=true;}});
-  // 스크롤하면 상단 메뉴만 반투명 유리 효과로 바뀐다.
-  const header=document.querySelector(".site-header"); const onScroll=()=>header.classList.toggle("scrolled",window.scrollY>8);
-  window.addEventListener("scroll",onScroll,{passive:true}); onScroll();
+  // (옛 상단 메뉴의 스크롤 유리 효과는 사이드 탭으로 바뀌면서 필요 없어졌다. 상단 메뉴가 있을 때만 동작한다.)
+  const header=document.querySelector(".site-header");
+  if(header){const onScroll=()=>header.classList.toggle("scrolled",window.scrollY>8); window.addEventListener("scroll",onScroll,{passive:true}); onScroll();}
 }
 
 const CHAT_STORE="kma-chat-v1", CHAT_PENDING="kma-chat-pending-v1";

@@ -106,18 +106,18 @@ const hourTip=(r)=>`${slotLabel(r)} · ${wxText(r)} · 기온 ${isMissing(r.temp
 function renderNow(r){
   const d=r.data||{}, base=r.requestedRelease;
   const hasPty=d.pty>0, icon=hasPty?wxCodeIcon(null,d.pty,"xl"):`<span class="now-noicon">${ui("thermo")}</span>`;
-  const tile=(label,value,sub)=>`<div class="now-tile"><span class="lab">${esc(label)}</span><strong>${isMissing(value)?'<span class="missing">미제공</span>':value}</strong>${sub?`<small>${sub}</small>`:""}</div>`;
-  const wind=isMissing(d.windSpeed)?null:`${windArrow(d.windDir)}${esc(d.windSpeed)}<small class="u">m/s</small>`;
-  const rain=isMissing(d.rain1h)?null:`${esc(d.rain1h)}<small class="u">mm</small>`;
+  const tile=(label,value,sub,fx)=>`<div class="now-tile"${fx?` data-fx="${fx}"`:""}><span class="lab">${esc(label)}</span><strong>${isMissing(value)?'<span class="missing">미제공</span>':value}</strong>${sub?`<small>${sub}</small>`:""}</div>`;
+  const wind=isMissing(d.windSpeed)?null:`${windArrow(d.windDir)}<span data-count="${esc(d.windSpeed)}">${esc(d.windSpeed)}</span><small class="u">m/s</small>`;
+  const rain=isMissing(d.rain1h)?null:`<span data-count="${esc(d.rain1h)}">${esc(d.rain1h)}</span><small class="u">mm</small>`;
   const rows=[["T1H","기온",d.temperature,"℃"],["RN1","1시간 강수량",d.rain1h,"mm"],["REH","습도",d.humidity,"%"],["WSD","풍속",d.windSpeed,"m/s"],["VEC","풍향",d.windDir,"°"],["UUU","동서바람성분(동+, 서-)",d.windU,"m/s"],["VVV","남북바람성분(북+, 남-)",d.windV,"m/s"],["PTY","강수형태 코드",d.pty,d.ptyLabel?`(${d.ptyLabel})`:""]];
   const table=tableFor(rows,["코드","항목","값","단위"],x=>[`<span class="code">${esc(x[0])}</span>`,esc(x[1]),showValue(x[2]),esc(x[3])]);
   $("results").innerHTML=metaPanel(r)+`<section class="panel reveal now-hero"><div class="now-main">
     <div class="now-ic">${icon}</div>
     <div><p class="step">${esc(fmtDate(`${base.slice(0,4)}-${base.slice(4,6)}-${base.slice(6,8)}`))} ${esc(base.slice(8,10))}:${esc(base.slice(10,12))} 관측</p>
-    <div class="now-temp">${isMissing(d.temperature)?'<span class="missing">미제공</span>':`${esc(d.temperature)}<small>℃</small>`}</div>
+    <div class="now-temp">${isMissing(d.temperature)?'<span class="missing">미제공</span>':`<span data-count="${esc(d.temperature)}">${esc(d.temperature)}</span><small>℃</small>`}</div>
     <p class="now-pty">${esc(d.ptyLabel||"강수형태 미제공")}</p></div></div>
-    <div class="now-tiles">${tile("습도",isMissing(d.humidity)?null:`${esc(d.humidity)}<small class="u">%</small>`)}${tile("1시간 강수량",rain)}
-    ${tile("풍속",wind,d.windLabel?`${esc(d.windLabel)}${isMissing(d.windDir)?"":` · ${esc(d.windDir)}°`}`:"")}</div>
+    <div class="now-tiles">${tile("습도",isMissing(d.humidity)?null:`<span data-count="${esc(d.humidity)}">${esc(d.humidity)}</span><small class="u">%</small>`,"","humid")}${tile("1시간 강수량",rain,"","rain")}
+    ${tile("풍속",wind,d.windLabel?`${esc(d.windLabel)}${isMissing(d.windDir)?"":` · ${esc(d.windDir)}°`}`:"","wind")}</div>
     <p class="small">예보가 아니라 해당 예보 구역의 대표 AWS(자동기상관측) 관측값입니다. 하늘상태(맑음·흐림)는 실황에 포함되지 않아 표시하지 않습니다. 풍향은 바람이 불어오는 방향이며 화살표는 바람이 향하는 쪽입니다.</p></section>
     <section class="panel reveal"><h2>관측 항목</h2><div class="gap"></div>${table}</section>`+rawDetails(r);
 }
